@@ -1,0 +1,293 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: homecrew-postgres
+    environment:
+      POSTGRES_USER: homecrew
+      POSTGRES_PASSWORD: homecrew
+      POSTGRES_DB: homecrew
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homecrew -d homecrew"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - homecrew
+
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: homecrew-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - homecrew
+
+  service-discovery:
+    image: homecrew/service-discovery:local
+    container_name: homecrew-service-discovery
+    ports:
+      - "8761:8761"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
+      EUREKA_CLIENT_FETCH_REGISTRY: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8761/actuator/health || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      - homecrew
+
+  config-server:
+    image: homecrew/config-server:local
+    container_name: homecrew-config-server
+    ports:
+      - "8888:8888"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME}
+      CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN}
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8888/actuator/health || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      - homecrew
+
+  api-gateway:
+    image: homecrew/api-gateway:local
+    container_name: homecrew-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  auth-service:
+    image: homecrew/auth-service:local
+    container_name: homecrew-auth-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  user-service:
+    image: homecrew/user-service:local
+    container_name: homecrew-user-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  admin-service:
+    image: homecrew/admin-service:local
+    container_name: homecrew-admin-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  booking-service:
+    image: homecrew/booking-service:local
+    container_name: homecrew-booking-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  worker-service:
+    image: homecrew/worker-service:local
+    container_name: homecrew-worker-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  notification-service:
+    image: homecrew/notification-service:local
+    container_name: homecrew-notification-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  payment-service:
+    image: homecrew/payment-service:local
+    container_name: homecrew-payment-service
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  xp-service:
+    image: homecrew/xp-service:local
+    container_name: homecrew-xp-service
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+  assignment-service:
+    image: homecrew/assignment-service:local
+    container_name: homecrew-assignment-service
+    ports:
+      - "8089:8089"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      config-server:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - homecrew
+
+networks:
+  homecrew:
+    name: homecrew
+
+volumes:
+  postgres_data:
+  kafka_data:
