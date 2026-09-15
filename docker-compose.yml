@@ -4,6 +4,7 @@ x-spring-environment: &spring-environment
 
 x-common-service: &common-service
   restart: unless-stopped
+  init: true
   logging:
     driver: json-file
     options:
@@ -15,6 +16,8 @@ services:
     <<: *common-service
     image: postgres:18
     container_name: homecrew-postgres
+
+    mem_limit: 256m
 
     environment:
       POSTGRES_USER: homecrew
@@ -56,6 +59,8 @@ services:
     image: apache/kafka:4.1.0
     container_name: homecrew-kafka
 
+    mem_limit: 384m
+
     ports:
       - "9092:9092"
 
@@ -74,7 +79,6 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
-      # Low-memory development server
       KAFKA_HEAP_OPTS: "-Xms128m -Xmx256m"
 
     volumes:
@@ -99,11 +103,14 @@ services:
     image: mthanuj/homecrew-service-discovery:dev
     container_name: homecrew-service-discovery
 
+    mem_limit: 256m
+
     ports:
       - "8761:8761"
 
     environment:
       <<: *spring-environment
+      JAVA_TOOL_OPTIONS: "-Xms32m -Xmx192m -XX:+UseSerialGC"
       EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
       EUREKA_CLIENT_FETCH_REGISTRY: "false"
 
@@ -132,11 +139,14 @@ services:
     image: mthanuj/homecrew-config-server:dev
     container_name: homecrew-config-server
 
+    mem_limit: 256m
+
     ports:
       - "8888:8888"
 
     environment:
       <<: *spring-environment
+      JAVA_TOOL_OPTIONS: "-Xms32m -Xmx192m -XX:+UseSerialGC"
       CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME}
       CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN}
 
@@ -163,6 +173,8 @@ services:
     image: mthanuj/homecrew-api-gateway:dev
     container_name: homecrew-api-gateway
 
+    mem_limit: 192m
+
     ports:
       - "8080:8080"
 
@@ -182,6 +194,8 @@ services:
     <<: *common-service
     image: mthanuj/homecrew-auth-service:dev
     container_name: homecrew-auth-service
+
+    mem_limit: 192m
 
     ports:
       - "8082:8082"
@@ -205,6 +219,8 @@ services:
     image: mthanuj/homecrew-user-service:dev
     container_name: homecrew-user-service
 
+    mem_limit: 192m
+
     ports:
       - "8081:8081"
 
@@ -226,6 +242,8 @@ services:
     <<: *common-service
     image: mthanuj/homecrew-admin-service:dev
     container_name: homecrew-admin-service
+
+    mem_limit: 192m
 
     ports:
       - "8083:8083"
@@ -251,6 +269,8 @@ services:
     image: mthanuj/homecrew-booking-service:dev
     container_name: homecrew-booking-service
 
+    mem_limit: 192m
+
     ports:
       - "8084:8084"
 
@@ -274,6 +294,8 @@ services:
     <<: *common-service
     image: mthanuj/homecrew-worker-service:dev
     container_name: homecrew-worker-service
+
+    mem_limit: 192m
 
     ports:
       - "8085:8085"
@@ -299,6 +321,8 @@ services:
     image: mthanuj/homecrew-notification-service:dev
     container_name: homecrew-notification-service
 
+    mem_limit: 192m
+
     ports:
       - "8086:8086"
 
@@ -320,6 +344,8 @@ services:
     <<: *common-service
     image: mthanuj/homecrew-payment-service:dev
     container_name: homecrew-payment-service
+
+    mem_limit: 192m
 
     ports:
       - "8087:8087"
@@ -345,6 +371,8 @@ services:
     image: mthanuj/homecrew-xp-service:dev
     container_name: homecrew-xp-service
 
+    mem_limit: 192m
+
     ports:
       - "8088:8088"
 
@@ -368,6 +396,8 @@ services:
     <<: *common-service
     image: mthanuj/homecrew-assignment-service:dev
     container_name: homecrew-assignment-service
+
+    mem_limit: 192m
 
     ports:
       - "8089:8089"
