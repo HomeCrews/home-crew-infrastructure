@@ -1,3 +1,7 @@
+x-spring-environment: &spring-environment
+  SPRING_PROFILES_ACTIVE: docker
+  JAVA_TOOL_OPTIONS: "-Xms32m -Xmx128m -XX:+UseSerialGC"
+
 services:
   postgres:
     image: postgres:18
@@ -29,16 +33,23 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Low-memory development server
+      KAFKA_HEAP_OPTS: "-Xms128m -Xmx256m"
+
     volumes:
       - kafka_data:/var/lib/kafka/data
+
     healthcheck:
       test:
         [
@@ -49,6 +60,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
     networks:
       - homecrew
 
@@ -58,7 +70,7 @@ services:
     ports:
       - "8761:8761"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
       EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
       EUREKA_CLIENT_FETCH_REGISTRY: "false"
     depends_on:
@@ -85,7 +97,7 @@ services:
     ports:
       - "8888:8888"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
       CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME}
       CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN}
     depends_on:
@@ -110,7 +122,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -125,7 +137,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -142,7 +154,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -159,7 +171,7 @@ services:
     ports:
       - "8083:8083"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -178,7 +190,7 @@ services:
     ports:
       - "8084:8084"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -197,7 +209,7 @@ services:
     ports:
       - "8085:8085"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -216,7 +228,7 @@ services:
     ports:
       - "8086:8086"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -233,7 +245,7 @@ services:
     ports:
       - "8087:8087"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -252,7 +264,7 @@ services:
     ports:
       - "8088:8088"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy
@@ -271,7 +283,7 @@ services:
     ports:
       - "8089:8089"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *spring-environment
     depends_on:
       config-server:
         condition: service_healthy

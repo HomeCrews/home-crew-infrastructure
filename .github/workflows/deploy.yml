@@ -16,6 +16,9 @@ jobs:
     environment: dev
 
     steps:
+      - name: Checkout infrastructure repository
+        uses: actions/checkout@v4
+
       - name: Validate deployment payload
         env:
           SERVICE: ${{ github.event.client_payload.service }}
@@ -69,9 +72,31 @@ jobs:
 
           ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts
 
+      - name: Sync infrastructure configuration
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+        run: |
+          set -euo pipefail
+
+          echo "Syncing infrastructure configuration..."
+
+          test -f "$GITHUB_WORKSPACE/docker-compose.yml"
+
+          ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "mkdir -p /opt/homecrew"
+
+          scp \
+            -i ~/.ssh/homecrew \
+            "$GITHUB_WORKSPACE/docker-compose.yml" \
+            "$HETZNER_USER@$HETZNER_HOST:/opt/homecrew/docker-compose.yml"
+
+          echo "Infrastructure configuration synced."
+
       - name: Deploy service
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
           HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
           HETZNER_USER: ${{ secrets.HETZNER_USER }}
           SERVICE: ${{ github.event.client_payload.service }}
@@ -96,6 +121,7 @@ jobs:
             -i ~/.ssh/homecrew \
             "$HETZNER_USER@$HETZNER_HOST" \
             "cd /opt/homecrew && \
+             docker compose config --quiet && \
              docker compose pull '$SERVICE' && \
              docker compose up -d '$SERVICE'"
 
