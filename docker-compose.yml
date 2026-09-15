@@ -2,33 +2,63 @@ x-spring-environment: &spring-environment
   SPRING_PROFILES_ACTIVE: docker
   JAVA_TOOL_OPTIONS: "-Xms32m -Xmx128m -XX:+UseSerialGC"
 
+x-common-service: &common-service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   postgres:
+    <<: *common-service
     image: postgres:18
     container_name: homecrew-postgres
+
     environment:
       POSTGRES_USER: homecrew
       POSTGRES_PASSWORD: homecrew
       POSTGRES_DB: homecrew
+
     ports:
       - "5432:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - effective_cache_size=128MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=50
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U homecrew -d homecrew"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
+
     networks:
       - homecrew
 
   kafka:
+    <<: *common-service
     image: apache/kafka:4.1.0
     container_name: homecrew-kafka
+
     ports:
       - "9092:9092"
+
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -65,19 +95,24 @@ services:
       - homecrew
 
   service-discovery:
+    <<: *common-service
     image: mthanuj/homecrew-service-discovery:dev
     container_name: homecrew-service-discovery
+
     ports:
       - "8761:8761"
+
     environment:
       <<: *spring-environment
       EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
       EUREKA_CLIENT_FETCH_REGISTRY: "false"
+
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     healthcheck:
       test:
         [
@@ -88,21 +123,27 @@ services:
       timeout: 3s
       retries: 20
       start_period: 20s
+
     networks:
       - homecrew
 
   config-server:
+    <<: *common-service
     image: mthanuj/homecrew-config-server:dev
     container_name: homecrew-config-server
+
     ports:
       - "8888:8888"
+
     environment:
       <<: *spring-environment
       CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME}
       CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN}
+
     depends_on:
       service-discovery:
         condition: service_healthy
+
     healthcheck:
       test:
         [
@@ -113,31 +154,41 @@ services:
       timeout: 3s
       retries: 20
       start_period: 20s
+
     networks:
       - homecrew
 
   api-gateway:
+    <<: *common-service
     image: mthanuj/homecrew-api-gateway:dev
     container_name: homecrew-api-gateway
+
     ports:
       - "8080:8080"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
       service-discovery:
         condition: service_healthy
+
     networks:
       - homecrew
 
   auth-service:
+    <<: *common-service
     image: mthanuj/homecrew-auth-service:dev
     container_name: homecrew-auth-service
+
     ports:
       - "8082:8082"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -145,16 +196,21 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
     networks:
       - homecrew
 
   user-service:
+    <<: *common-service
     image: mthanuj/homecrew-user-service:dev
     container_name: homecrew-user-service
+
     ports:
       - "8081:8081"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -162,16 +218,21 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
     networks:
       - homecrew
 
   admin-service:
+    <<: *common-service
     image: mthanuj/homecrew-admin-service:dev
     container_name: homecrew-admin-service
+
     ports:
       - "8083:8083"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -181,16 +242,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   booking-service:
+    <<: *common-service
     image: mthanuj/homecrew-booking-service:dev
     container_name: homecrew-booking-service
+
     ports:
       - "8084:8084"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -200,16 +266,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   worker-service:
+    <<: *common-service
     image: mthanuj/homecrew-worker-service:dev
     container_name: homecrew-worker-service
+
     ports:
       - "8085:8085"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -219,16 +290,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   notification-service:
+    <<: *common-service
     image: mthanuj/homecrew-notification-service:dev
     container_name: homecrew-notification-service
+
     ports:
       - "8086:8086"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -236,16 +312,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   payment-service:
+    <<: *common-service
     image: mthanuj/homecrew-payment-service:dev
     container_name: homecrew-payment-service
+
     ports:
       - "8087:8087"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -255,16 +336,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   xp-service:
+    <<: *common-service
     image: mthanuj/homecrew-xp-service:dev
     container_name: homecrew-xp-service
+
     ports:
       - "8088:8088"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -274,16 +360,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
   assignment-service:
+    <<: *common-service
     image: mthanuj/homecrew-assignment-service:dev
     container_name: homecrew-assignment-service
+
     ports:
       - "8089:8089"
+
     environment:
       <<: *spring-environment
+
     depends_on:
       config-server:
         condition: service_healthy
@@ -293,6 +384,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
     networks:
       - homecrew
 
