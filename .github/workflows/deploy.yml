@@ -1,61 +1,46 @@
-name: Deploy to Hetzner
+name: Deploy to Hetzner Dev
 
 on:
   repository_dispatch:
     types:
       - service-image-updated
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy ${{ github.event.client_payload.service }}
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
-      - name: Validate deployment payload
-        run: |
-          SERVICE="${{ github.event.client_payload.service }}"
-          IMAGE="${{ github.event.client_payload.image }}"
-          TAG="${{ github.event.client_payload.tag }}"
+      - name: Checkout infrastructure
+        uses: actions/checkout@v4
+        with:
+          ref: dev
 
+      - name: Validate deployment payload
+        env:
+          SERVICE: ${{ github.event.client_payload.service }}
+          TAG: ${{ github.event.client_payload.tag }}
+        run: |
           echo "Service: $SERVICE"
-          echo "Image:   $IMAGE"
           echo "Tag:     $TAG"
 
+          if [ "$TAG" != "dev" ]; then
+            echo "Only the dev tag can be deployed to this server."
+            exit 1
+          fi
+
           case "$SERVICE" in
-            user-service)
-              ;;
-            auth-service)
-              ;;
-            admin-service)
-              ;;
-            booking-service)
-              ;;
-            worker-service)
-              ;;
-            notification-service)
-              ;;
-            payment-service)
-              ;;
-            xp-service)
-              ;;
-            assignment-service)
-              ;;
-            api-gateway)
-              ;;
-            config-server)
-              ;;
-            service-discovery)
+            service-discovery|config-server|api-gateway|auth-service|user-service|admin-service|booking-service|worker-service|notification-service|payment-service|xp-service|assignment-service)
               ;;
             *)
               echo "Unknown service: $SERVICE"
               exit 1
               ;;
           esac
-
-          if [ "$TAG" != "dev" ]; then
-            echo "Only the dev tag can be deployed to this server."
-            exit 1
-          fi
 
       - name: Configure SSH
         run: |
@@ -67,21 +52,68 @@ jobs:
           ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" \
             >> ~/.ssh/known_hosts
 
+      - name: Sync Docker Compose
+        run: |
+          scp \
+            docker-compose.yml \
+            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:/opt/homecrew/docker-compose.yml"
+
+      - name: Sync environment
+        env:
+          CONFIG_GIT_USERNAME: ${{ secrets.CONFIG_GIT_USERNAME }}
+          CONFIG_GIT_TOKEN: ${{ secrets.CONFIG_GIT_TOKEN }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        run: |
+          cat > .env.deploy <<EOF
+          CONFIG_GIT_USERNAME=${CONFIG_GIT_USERNAME}
+          CONFIG_GIT_TOKEN=${CONFIG_GIT_TOKEN}
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=${POSTGRES_DB}
+          EOF
+
+          chmod 600 .env.deploy
+
+          scp \
+            .env.deploy \
+            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:/opt/homecrew/.env"
+
+          rm -f .env.deploy
+
       - name: Deploy service
         env:
           SERVICE: ${{ github.event.client_payload.service }}
         run: |
-          ssh \
-            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" \
-            "cd /opt/homecrew && \
-             docker compose pull ${SERVICE} && \
-             docker compose up -d ${SERVICE}"
+          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" << EOF
+            set -e
 
-      - name: Verify service
+            cd /opt/homecrew
+
+            docker compose pull "$SERVICE"
+            docker compose up -d "$SERVICE"
+
+            docker image prune -f
+          EOF
+
+      - name: Verify deployment
         env:
           SERVICE: ${{ github.event.client_payload.service }}
         run: |
-          ssh \
-            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" \
-            "cd /opt/homecrew && \
-             docker compose ps ${SERVICE}"
+          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" << EOF
+            set -e
+
+            cd /opt/homecrew
+
+            docker compose ps "$SERVICE"
+
+            STATUS=\$(docker inspect \
+              --format='{{.State.Status}}' \
+              "homecrew-\${SERVICE}")
+
+            if [ "\$STATUS" != "running" ]; then
+              echo "Service $SERVICE is not running."
+              exit 1
+            fi
+          EOF
