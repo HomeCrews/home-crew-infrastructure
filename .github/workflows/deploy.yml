@@ -1,0 +1,87 @@
+name: Deploy to Hetzner
+
+on:
+  repository_dispatch:
+    types:
+      - service-image-updated
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.event.client_payload.service }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate deployment payload
+        run: |
+          SERVICE="${{ github.event.client_payload.service }}"
+          IMAGE="${{ github.event.client_payload.image }}"
+          TAG="${{ github.event.client_payload.tag }}"
+
+          echo "Service: $SERVICE"
+          echo "Image:   $IMAGE"
+          echo "Tag:     $TAG"
+
+          case "$SERVICE" in
+            user-service)
+              ;;
+            auth-service)
+              ;;
+            admin-service)
+              ;;
+            booking-service)
+              ;;
+            worker-service)
+              ;;
+            notification-service)
+              ;;
+            payment-service)
+              ;;
+            xp-service)
+              ;;
+            assignment-service)
+              ;;
+            api-gateway)
+              ;;
+            config-server)
+              ;;
+            service-discovery)
+              ;;
+            *)
+              echo "Unknown service: $SERVICE"
+              exit 1
+              ;;
+          esac
+
+          if [ "$TAG" != "dev" ]; then
+            echo "Only the dev tag can be deployed to this server."
+            exit 1
+          fi
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" \
+            >> ~/.ssh/known_hosts
+
+      - name: Deploy service
+        env:
+          SERVICE: ${{ github.event.client_payload.service }}
+        run: |
+          ssh \
+            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" \
+            "cd /opt/homecrew && \
+             docker compose pull ${SERVICE} && \
+             docker compose up -d ${SERVICE}"
+
+      - name: Verify service
+        env:
+          SERVICE: ${{ github.event.client_payload.service }}
+        run: |
+          ssh \
+            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" \
+            "cd /opt/homecrew && \
+             docker compose ps ${SERVICE}"
