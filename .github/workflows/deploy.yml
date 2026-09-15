@@ -5,8 +5,9 @@ on:
     types:
       - service-image-updated
 
-permissions:
-  contents: read
+concurrency:
+  group: hetzner-dev-deployment
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -15,105 +16,119 @@ jobs:
     environment: dev
 
     steps:
-      - name: Checkout infrastructure
-        uses: actions/checkout@v4
-        with:
-          ref: dev
-
       - name: Validate deployment payload
         env:
           SERVICE: ${{ github.event.client_payload.service }}
+          IMAGE: ${{ github.event.client_payload.image }}
           TAG: ${{ github.event.client_payload.tag }}
+          SHA: ${{ github.event.client_payload.sha }}
         run: |
+          set -euo pipefail
+
           echo "Service: $SERVICE"
+          echo "Image:   $IMAGE"
           echo "Tag:     $TAG"
+          echo "SHA:     $SHA"
+
+          case "$SERVICE" in
+            user-service|auth-service|admin-service|booking-service|worker-service|notification-service|payment-service|xp-service|assignment-service|api-gateway|config-server|service-discovery)
+              ;;
+            *)
+              echo "ERROR: Unsupported service: $SERVICE"
+              exit 1
+              ;;
+          esac
 
           if [ "$TAG" != "dev" ]; then
-            echo "Only the dev tag can be deployed to this server."
+            echo "ERROR: Only dev deployments are allowed."
             exit 1
           fi
 
-          case "$SERVICE" in
-            service-discovery|config-server|api-gateway|auth-service|user-service|admin-service|booking-service|worker-service|notification-service|payment-service|xp-service|assignment-service)
+          case "$IMAGE" in
+            mthanuj/homecrew-*)
               ;;
             *)
-              echo "Unknown service: $SERVICE"
+              echo "ERROR: Invalid Docker image: $IMAGE"
               exit 1
               ;;
           esac
 
       - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-
-          ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" \
-            >> ~/.ssh/known_hosts
-
-      - name: Sync Docker Compose
-        run: |
-          scp \
-            docker-compose.yml \
-            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:/opt/homecrew/docker-compose.yml"
-
-      - name: Sync environment
         env:
-          CONFIG_GIT_USERNAME: ${{ secrets.CONFIG_GIT_USERNAME }}
-          CONFIG_GIT_TOKEN: ${{ secrets.CONFIG_GIT_TOKEN }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
         run: |
-          cat > .env.deploy <<EOF
-          CONFIG_GIT_USERNAME=${CONFIG_GIT_USERNAME}
-          CONFIG_GIT_TOKEN=${CONFIG_GIT_TOKEN}
-          POSTGRES_USER=${POSTGRES_USER}
-          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-          POSTGRES_DB=${POSTGRES_DB}
-          EOF
+          set -euo pipefail
 
-          chmod 600 .env.deploy
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
 
-          scp \
-            .env.deploy \
-            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:/opt/homecrew/.env"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/homecrew
+          chmod 600 ~/.ssh/homecrew
 
-          rm -f .env.deploy
+          ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy service
         env:
+          SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
           SERVICE: ${{ github.event.client_payload.service }}
+          IMAGE: ${{ github.event.client_payload.image }}
+          TAG: ${{ github.event.client_payload.tag }}
+          SHA: ${{ github.event.client_payload.sha }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" << EOF
-            set -e
+          set -euo pipefail
 
-            cd /opt/homecrew
+          echo "Deploying $SERVICE"
+          echo "Image: $IMAGE:$TAG"
+          echo "Commit: $SHA"
 
-            docker compose pull "$SERVICE"
-            docker compose up -d "$SERVICE"
+          printf '%s' "$DOCKERHUB_TOKEN" | ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "docker login -u '$DOCKERHUB_USERNAME' --password-stdin"
 
-            docker image prune -f
-          EOF
+          ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "cd /opt/homecrew && \
+             docker compose pull '$SERVICE' && \
+             docker compose up -d '$SERVICE'"
 
       - name: Verify deployment
         env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
           SERVICE: ${{ github.event.client_payload.service }}
         run: |
-          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" << EOF
-            set -e
+          set -euo pipefail
 
-            cd /opt/homecrew
+          echo "Verifying $SERVICE..."
 
-            docker compose ps "$SERVICE"
+          ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "cd /opt/homecrew && \
+             docker compose ps '$SERVICE' && \
+             docker inspect 'homecrew-$SERVICE' \
+               --format 'Image={{.Config.Image}} Status={{.State.Status}}'"
 
-            STATUS=\$(docker inspect \
-              --format='{{.State.Status}}' \
-              "homecrew-\${SERVICE}")
-
-            if [ "\$STATUS" != "running" ]; then
-              echo "Service $SERVICE is not running."
-              exit 1
-            fi
-          EOF
+      - name: Deployment summary
+        env:
+          SERVICE: ${{ github.event.client_payload.service }}
+          IMAGE: ${{ github.event.client_payload.image }}
+          TAG: ${{ github.event.client_payload.tag }}
+          SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          echo "========================================"
+          echo "Deployment successful"
+          echo "========================================"
+          echo "Service : $SERVICE"
+          echo "Image   : $IMAGE:$TAG"
+          echo "SHA     : $SHA"
+          echo "Target  : Hetzner Dev"
+          echo "========================================"
