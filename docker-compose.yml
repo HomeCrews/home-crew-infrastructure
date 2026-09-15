@@ -53,7 +53,7 @@ services:
       - homecrew
 
   service-discovery:
-    image: homecrew/service-discovery:local
+    image: mthanuj/homecrew-service-discovery:dev
     container_name: homecrew-service-discovery
     ports:
       - "8761:8761"
@@ -80,7 +80,7 @@ services:
       - homecrew
 
   config-server:
-    image: homecrew/config-server:local
+    image: mthanuj/homecrew-config-server:dev
     container_name: homecrew-config-server
     ports:
       - "8888:8888"
@@ -105,7 +105,7 @@ services:
       - homecrew
 
   api-gateway:
-    image: homecrew/api-gateway:local
+    image: mthanuj/homecrew-api-gateway:dev
     container_name: homecrew-api-gateway
     ports:
       - "8080:8080"
@@ -120,7 +120,7 @@ services:
       - homecrew
 
   auth-service:
-    image: homecrew/auth-service:local
+    image: mthanuj/homecrew-auth-service:dev
     container_name: homecrew-auth-service
     ports:
       - "8082:8082"
@@ -137,7 +137,7 @@ services:
       - homecrew
 
   user-service:
-    image: homecrew/user-service:local
+    image: mthanuj/homecrew-user-service:dev
     container_name: homecrew-user-service
     ports:
       - "8081:8081"
@@ -154,7 +154,7 @@ services:
       - homecrew
 
   admin-service:
-    image: homecrew/admin-service:local
+    image: mthanuj/homecrew-admin-service:dev
     container_name: homecrew-admin-service
     ports:
       - "8083:8083"
@@ -173,7 +173,7 @@ services:
       - homecrew
 
   booking-service:
-    image: homecrew/booking-service:local
+    image: mthanuj/homecrew-booking-service:dev
     container_name: homecrew-booking-service
     ports:
       - "8084:8084"
@@ -192,7 +192,7 @@ services:
       - homecrew
 
   worker-service:
-    image: homecrew/worker-service:local
+    image: mthanuj/homecrew-worker-service:dev
     container_name: homecrew-worker-service
     ports:
       - "8085:8085"
@@ -211,7 +211,7 @@ services:
       - homecrew
 
   notification-service:
-    image: homecrew/notification-service:local
+    image: mthanuj/homecrew-notification-service:dev
     container_name: homecrew-notification-service
     ports:
       - "8086:8086"
@@ -228,7 +228,7 @@ services:
       - homecrew
 
   payment-service:
-    image: homecrew/payment-service:local
+    image: mthanuj/homecrew-payment-service:dev
     container_name: homecrew-payment-service
     ports:
       - "8087:8087"
@@ -247,7 +247,7 @@ services:
       - homecrew
 
   xp-service:
-    image: homecrew/xp-service:local
+    image: mthanuj/homecrew-xp-service:dev
     container_name: homecrew-xp-service
     ports:
       - "8088:8088"
@@ -266,7 +266,7 @@ services:
       - homecrew
 
   assignment-service:
-    image: homecrew/assignment-service:local
+    image: mthanuj/homecrew-assignment-service:dev
     container_name: homecrew-assignment-service
     ports:
       - "8089:8089"
