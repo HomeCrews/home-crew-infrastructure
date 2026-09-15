@@ -8,6 +8,7 @@ on:
 concurrency:
   group: hetzner-dev-deployment
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
