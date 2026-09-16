@@ -9,6 +9,8 @@ set -eu
 
 is_maven_repo || { ok "not a Maven repo; skipped build"; exit 0; }
 
+check_jdk_version
+
 MVNW=$(mvn_wrapper) || fail "no Maven wrapper (./mvnw) and no mvn on PATH."
 
 info "running the full build gate - this takes a while"
