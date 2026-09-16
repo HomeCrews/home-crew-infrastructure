@@ -130,6 +130,38 @@ is_maven_repo() {
     [ -f "$_root/pom.xml" ]
 }
 
+# Fail fast when the active JDK is older than the project target. Otherwise the
+# build dies deep in the compiler with "release version N not supported", which
+# looks like broken code rather than a wrong JAVA_HOME.
+check_jdk_version() {
+    _root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+    [ -f "$_root/pom.xml" ] || return 0
+
+    _want=$(sed -n 's|.*<java.version>\([0-9][0-9]*\)</java.version>.*|\1|p' \
+        "$_root/pom.xml" | head -1)
+    [ -n "$_want" ] || return 0
+
+    _java="java"
+    if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+        _java="$JAVA_HOME/bin/java"
+    fi
+    _have=$("$_java" -version 2>&1 | head -1 \
+        | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p')
+    [ -n "$_have" ] || return 0
+
+    if [ "$_have" -lt "$_want" ] 2>/dev/null; then
+        fail "active JDK is $_have, but this project targets Java $_want." \
+            "  The build would fail with \"release version $_want not supported\"." \
+            "" \
+            "  Point JAVA_HOME at a JDK $_want and try again:" \
+            "    macOS:  export JAVA_HOME=\$(/usr/libexec/java_home -v $_want)" \
+            "    Linux:  export JAVA_HOME=/path/to/jdk-$_want" \
+            "    sdkman: sdk use java $_want.x" \
+            "" \
+            "  This is an environment problem, not a problem with your change."
+    fi
+}
+
 # Run one check script from .githooks/checks/, aborting the hook if it fails.
 run_check() {
     _script="$(dirname "$0")/checks/$1"
