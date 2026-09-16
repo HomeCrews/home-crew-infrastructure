@@ -1,0 +1,15 @@
+# Secrets. .env holds live credentials and must never be committed;
+# .env.example carries the key names with placeholder values instead.
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Local state
+*.log

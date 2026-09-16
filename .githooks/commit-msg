@@ -1,0 +1,12 @@
+#!/bin/sh
+# HomeCrew commit-msg hook - Conventional Commits.
+#
+#   <type>[optional scope][!]: <description>
+
+set -eu
+
+HOOK_NAME="commit-msg"
+export HOOK_NAME
+. "$(dirname "$0")/common.sh"
+
+run_check commit-message.sh "$1"
