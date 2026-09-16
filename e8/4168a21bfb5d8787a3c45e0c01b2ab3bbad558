@@ -1,0 +1,41 @@
+.gitignore
+  s_3d9bbfd7b8519e::t_126019da5d29ef 1-15
+.editorconfig
+  s_3d9bbfd7b8519e::t_47fe4b53d37c29 1-35
+.githooks/checks/branch-name.sh
+  s_3d9bbfd7b8519e::t_dcfbb31dcd480e 1-8
+.githooks/checks/build.sh
+  s_3d9bbfd7b8519e::t_032664e2d58c0d 1-31
+.githooks/checks/commit-message.sh
+  s_3d9bbfd7b8519e::t_fa2fb661c56b09 1-52
+.githooks/checks/formatting.sh
+  s_3d9bbfd7b8519e::t_7aae4ada2c4199 1-46
+.githooks/checks/secrets.sh
+  s_3d9bbfd7b8519e::t_d9c765a1bb71d0 1-24
+.githooks/commit-msg
+  s_3d9bbfd7b8519e::t_a6a393a9715583 1-12
+.githooks/common.sh
+  s_3d9bbfd7b8519e::t_98ad27b9759f4f 1-139
+.githooks/install.sh
+  s_3d9bbfd7b8519e::t_5a08325913c981 1-32
+.githooks/pre-commit
+  s_3d9bbfd7b8519e::t_54a22a65016863 1-18
+.githooks/pre-push
+  s_3d9bbfd7b8519e::t_5a0ecb3a191272 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e84168a21bfb5d8787a3c45e0c01b2ab3bbad558",
+  "prompts": {},
+  "sessions": {
+    "s_3d9bbfd7b8519e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56713074-cac4-4411-b930-44405690d84c",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
