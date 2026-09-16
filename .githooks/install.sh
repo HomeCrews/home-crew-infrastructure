@@ -1,9 +1,12 @@
 #!/bin/sh
 # Points git at the versioned hooks in .githooks/.
 #
-# Run automatically at Maven's initialize phase, so a fresh clone is protected
-# the first time anyone builds. Safe to run repeatedly, and a no-op outside a
-# git work tree (Docker builds, source tarballs, CI archive checkouts).
+# Normally you do not need to run this: the Maven build invokes
+# `git config core.hooksPath .githooks` directly at the initialize phase, on
+# every platform. This script exists for repos with no Maven build, and for
+# setting the hooks up without running a build first.
+#
+# Safe to run repeatedly, and a no-op outside a git work tree.
 
 set -eu
 
@@ -21,7 +24,9 @@ if [ "$current" != ".githooks" ]; then
     printf '[hooks] core.hooksPath -> .githooks\n' >&2
 fi
 
-# Clones do not preserve the executable bit reliably across all platforms.
+# Unix only, and only a fallback: the executable bit is recorded in the index
+# (mode 100755), so a normal clone already has it. Windows has no such bit and
+# Git for Windows runs hooks through its bundled sh regardless.
 for hook in pre-commit commit-msg pre-push; do
     [ -f ".githooks/$hook" ] && chmod +x ".githooks/$hook" 2>/dev/null || true
 done
