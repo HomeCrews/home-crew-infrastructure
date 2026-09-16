@@ -1,0 +1,23 @@
+.gitattributes
+  s_3d9bbfd7b8519e::t_12cce0c171c939 1-15
+.githooks/checks/secrets.sh
+  s_3d9bbfd7b8519e::t_bed77161178536 4-5,13-33,42-50
+.githooks/install.sh
+  s_3d9bbfd7b8519e::t_3905e5ad4ec5dd 4-9,27-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "bcab519a0627e1295dd58cde19c3f83659b52d13",
+  "prompts": {},
+  "sessions": {
+    "s_3d9bbfd7b8519e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56713074-cac4-4411-b930-44405690d84c",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
