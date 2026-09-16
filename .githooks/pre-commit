@@ -1,0 +1,18 @@
+#!/bin/sh
+# HomeCrew pre-commit hook.
+#
+# Composes the fast checks from .githooks/checks/. Each runs in order and the
+# first failure aborts the commit.
+#
+# Bypass with --no-verify only when you understand what you are skipping; CI
+# re-runs the same gates.
+
+set -eu
+
+HOOK_NAME="pre-commit"
+export HOOK_NAME
+. "$(dirname "$0")/common.sh"
+
+run_check branch-name.sh
+run_check secrets.sh
+run_check formatting.sh
