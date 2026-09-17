@@ -1,5 +1,31 @@
 x-spring-environment: &spring-environment
   SPRING_PROFILES_ACTIVE: docker
+
+  # Resolves ${CONFIG_SERVER_URI:...} in each service's single
+  # spring.config.import line. Services declare one import, not one per
+  # profile, so this is what points it inside the network.
+  CONFIG_SERVER_URI: http://config-server:8888
+
+  # ConfigServerConfigDataLoader throws when failFast || !optional, so this -
+  # not the optional: prefix - is the switch. A deployed service that cannot
+  # reach config-server must refuse to start rather than come up on whatever
+  # its jar happens to contain. config-server and service-discovery pick this
+  # up harmlessly: neither is a config client, so it binds to nothing.
+  SPRING_CLOUD_CONFIG_FAIL_FAST: "true"
+
+  # Resolve the ${DB_USERNAME}/${DB_PASSWORD} placeholders that config-server
+  # serves verbatim. .env drives compose SUBSTITUTION, not container
+  # environment, so these have to be passed through explicitly or the services
+  # would silently fall back to the defaults in home-crew-config and fail to
+  # authenticate against a postgres with a real password.
+  #
+  # The defaults match the postgres defaults so these two lines cannot drift
+  # apart, but they are not a way to skip .env: POSTGRES_PASSWORD is ${VAR:?}
+  # on the postgres service, so `docker compose config` fails outright without
+  # one. `cp .env.example .env` is required, locally and on the host.
+  DB_USERNAME: ${POSTGRES_USER:-homecrew}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-homecrew}
+
   JAVA_TOOL_OPTIONS: "-Xms32m -Xmx128m -XX:+UseSerialGC"
 
 x-common-service: &common-service
@@ -20,9 +46,13 @@ services:
     mem_limit: 256m
 
     environment:
-      POSTGRES_USER: homecrew
-      POSTGRES_PASSWORD: homecrew
-      POSTGRES_DB: homecrew
+      POSTGRES_USER: ${POSTGRES_USER:-homecrew}
+      # :? rather than :- on purpose. This is the one value in the file whose
+      # absence must be loud: `docker compose config --quiet` in deploy.yml
+      # passed happily with no .env at all, because a bare ${VAR} substitutes
+      # to empty with only a warning. Now it exits non-zero.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?unset - is /opt/homecrew/.env present and readable?}
+      POSTGRES_DB: ${POSTGRES_DB:-homecrew}
 
     ports:
       - "5432:5432"
@@ -147,8 +177,11 @@ services:
     environment:
       <<: *spring-environment
       JAVA_TOOL_OPTIONS: "-Xms32m -Xmx192m -XX:+UseSerialGC"
-      CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME}
-      CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN}
+      # Empty is a valid value: home-crew-config is public, and JGit does an
+      # anonymous clone when the username is empty. :- so an absent .env is
+      # silent here rather than fatal. Fill these in if the repo goes private.
+      CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME:-}
+      CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN:-}
 
     depends_on:
       service-discovery:
@@ -405,12 +438,14 @@ services:
     environment:
       <<: *spring-environment
 
+    # No postgres dependency: this service has no spring-boot-starter-data-jpa
+    # and no datasource, so it was waiting on a database it never opens - and
+    # there is no homecrew_assignment in postgres/init/01-create-databases.sql
+    # for it to open either.
     depends_on:
       config-server:
         condition: service_healthy
       service-discovery:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy

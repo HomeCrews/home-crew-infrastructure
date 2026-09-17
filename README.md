@@ -19,13 +19,20 @@ code; it is what runs the other fourteen.
 
 ## Running the stack
 
-    cp .env.example .env        # fill in CONFIG_GIT_USERNAME and CONFIG_GIT_TOKEN
+    cp .env.example .env
     docker compose up -d
     docker compose ps
 
-`.env` is gitignored and holds the credentials config-server uses to clone
-[home-crew-config](https://github.com/HomeCrews/home-crew-config) over HTTPS. A
-read-only personal access token is enough.
+`.env` is gitignored and is **required**, not optional: `POSTGRES_PASSWORD` is
+declared `${VAR:?}` in the compose file, so `docker compose config` exits
+non-zero without one. That is deliberate - the deploy runs
+`docker compose config --quiet`, and until this was a hard failure it passed
+happily against a host with no `.env` at all.
+
+The config-git credentials in it should stay **empty**.
+[home-crew-config](https://github.com/HomeCrews/home-crew-config) is public, and
+JGit does an anonymous clone when the username is empty. Fill them in only if
+that repository is ever made private.
 
 Startup is ordered by healthchecks, not by `depends_on` alone: postgres and
 kafka come up first, then service-discovery, then config-server, then
@@ -49,7 +56,7 @@ is running but not yet healthy will refuse connections.
 | notification-service | 8086 | `mthanuj/homecrew-notification-service:dev` | + kafka |
 | payment-service | 8087 | `mthanuj/homecrew-payment-service:dev` | + postgres, kafka |
 | xp-service | 8088 | `mthanuj/homecrew-xp-service:dev` | + postgres, kafka |
-| assignment-service | 8089 | `mthanuj/homecrew-assignment-service:dev` | + postgres, kafka |
+| assignment-service | 8089 | `mthanuj/homecrew-assignment-service:dev` | + kafka |
 
 Everything is on one user-defined bridge network named `homecrew`, and every
 service is memory-capped - the target is a small single host, so the JVMs run
@@ -68,15 +75,13 @@ Local credentials are `homecrew` for user, password and default database.
 They are a development convenience, documented as such, and are not used
 anywhere reachable.
 
-Two gaps worth knowing about, both deliberate to record rather than hide:
+There is deliberately no `homecrew_assignment`: assignment-service has no
+`spring-boot-starter-data-jpa` and no datasource, so it needs no database. Its
+`depends_on: postgres` was dead weight and has been removed.
 
-- **assignment-service waits on postgres but has no database.** There is no
-  `homecrew_assignment` in the init script. Either add it or drop the
-  `depends_on`; today the service comes up against a database that does not
-  exist.
-- **The init script only runs on an empty volume.** Adding a database to that
-  file does nothing to a stack that has already been started. Create it by
-  hand, or `docker compose down -v` and lose the data.
+One trap worth knowing: **the init script only runs on an empty volume.** Adding
+a database to that file does nothing to a stack that has already been started.
+Create it by hand, or `docker compose down -v` and lose the data.
 
 ## Deployment
 
@@ -102,10 +107,21 @@ It then copies `docker-compose.yml` to the host over SSH, pulls, and restarts.
 `concurrency` serialises deployments so two services landing at once cannot
 interleave.
 
-Required repository secrets, by name:
+Before copying the compose file, the workflow writes `/opt/homecrew/.env` from
+GitHub secrets, piped over stdin and renamed into place atomically. It is never
+scp'd, never passed as an ssh argument, and never printed. Rotation is therefore
+"change the secret and dispatch any service" rather than "ssh in and edit a file
+nobody documented".
+
+Required secrets, by name. The five deployment ones are repository-scoped; the
+rest are on the `dev` environment, which the job declares:
 
     HETZNER_SSH_PRIVATE_KEY    HETZNER_HOST    HETZNER_USER
     DOCKERHUB_USERNAME         DOCKERHUB_TOKEN
+
+    POSTGRES_USER    POSTGRES_PASSWORD    POSTGRES_DB
+    CONFIG_GIT_USERNAME    CONFIG_GIT_TOKEN    (both empty while the config
+                                                repository is public)
 
 Adding a thirteenth service means three edits here: a compose service, an
 entry in the deploy allow-list, and a database in the init script if it needs
