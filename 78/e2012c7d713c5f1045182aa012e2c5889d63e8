@@ -1,0 +1,24 @@
+.github/workflows/deploy.yml
+  s_31a1eea127e4f8::t_420abff9207d55 76-126
+.env.example
+  s_31a1eea127e4f8::t_40153cd3d373c9 1-25
+docker-compose.yml
+  s_31a1eea127e4f8::t_ae4f33fc93d5d5 22-25
+  s_31a1eea127e4f8::t_3df35c0a191114 3-21,26-28,49-55,180-184,441-444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "78e2012c7d713c5f1045182aa012e2c5889d63e8",
+  "prompts": {},
+  "sessions": {
+    "s_31a1eea127e4f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f4f44be-5501-4eca-af87-9e8310efb295",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
