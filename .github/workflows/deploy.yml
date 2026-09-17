@@ -73,6 +73,57 @@ jobs:
 
           ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts
 
+      - name: Write host environment file
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          CONFIG_GIT_USERNAME: ${{ secrets.CONFIG_GIT_USERNAME }}
+          CONFIG_GIT_TOKEN: ${{ secrets.CONFIG_GIT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # /opt/homecrew/.env used to be hand-placed, undocumented and
+          # unrotatable. docker compose reads it for variable substitution, so
+          # without it POSTGRES_PASSWORD is unset and `docker compose config`
+          # now fails - which is the point.
+          #
+          # Piped over stdin, never passed as an ssh argument: argv is visible
+          # in `ps` on the remote host for as long as the command runs. Not
+          # scp'd either - that would leave the file on the runner disk where
+          # every later step can read it.
+          #
+          # printf per line rather than a heredoc: an unquoted heredoc would
+          # mangle a value containing a backslash, and a compose .env cannot
+          # represent an embedded newline anyway.
+          #
+          # Written to .env.new and renamed, because mv on one filesystem is
+          # atomic - a `docker compose up` racing this step reads either the old
+          # file or the new one, never a truncated one.
+          {
+            printf 'POSTGRES_USER=%s\n'       "$POSTGRES_USER"
+            printf 'POSTGRES_PASSWORD=%s\n'   "$POSTGRES_PASSWORD"
+            printf 'POSTGRES_DB=%s\n'         "$POSTGRES_DB"
+            printf 'CONFIG_GIT_USERNAME=%s\n' "$CONFIG_GIT_USERNAME"
+            printf 'CONFIG_GIT_TOKEN=%s\n'    "$CONFIG_GIT_TOKEN"
+          } | ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "umask 077 \
+             && mkdir -p /opt/homecrew \
+             && cat > /opt/homecrew/.env.new \
+             && chmod 600 /opt/homecrew/.env.new \
+             && mv /opt/homecrew/.env.new /opt/homecrew/.env"
+
+          # Never cat the file back. Name, mode and size are enough to prove it
+          # landed; GitHub secrets are the source of truth for the contents.
+          ssh \
+            -i ~/.ssh/homecrew \
+            "$HETZNER_USER@$HETZNER_HOST" \
+            "stat -c '%n mode=%a size=%s' /opt/homecrew/.env"
+
       - name: Sync infrastructure configuration
         env:
           HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
