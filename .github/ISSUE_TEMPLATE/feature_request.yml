@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a change to home-crew-infrastructure
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What cannot be done today, and who is blocked by it. Describe the
+        problem, not the solution - the proposal goes in the next box.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: >
+        What you want built. If it crosses service boundaries, name every
+        service it touches.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What you rejected, and why. "None" is a valid answer.
+
+  - type: dropdown
+    id: blast-radius
+    attributes:
+      label: Blast radius
+      description: How far this reaches decides whether it is one PR or several.
+      options:
+        - This service only
+        - Needs a home-crew-config change
+        - Needs a home-crew-infrastructure change
+        - Cross-service, named in the proposal
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: flags
+    attributes:
+      label: Flags
+      options:
+        - label: This is a breaking API change
+        - label: This changes a port, an image name or a database
