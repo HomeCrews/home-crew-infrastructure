@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in home-crew-infrastructure behaves incorrectly
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Redact tokens, passwords and connection strings before you paste
+        anything. Issues are public and are indexed.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The actual behaviour, not your theory about the cause.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, from a clean start. Include the request you sent.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`. "Latest" is not a commit.
+      placeholder: a1b2c3d
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where you ran it
+      description: The three fail differently, so this narrows it a long way.
+      options:
+        - Local, ./mvnw spring-boot:run
+        - Local, docker compose up
+        - Hetzner dev deployment
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        The first [ERROR] is usually the real one; the last is usually a
+        consequence of it. Include both and what is between them.
+      render: text
+
+  - type: checkboxes
+    id: acks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues
+          required: true
+        - label: I redacted every credential in the text above
+          required: true
+        - label: This is not a security vulnerability (those go to SECURITY.md)
+          required: true
