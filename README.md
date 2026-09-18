@@ -29,10 +29,15 @@ non-zero without one. That is deliberate - the deploy runs
 `docker compose config --quiet`, and until this was a hard failure it passed
 happily against a host with no `.env` at all.
 
-The config-git credentials in it should stay **empty**.
-[home-crew-config](https://github.com/HomeCrews/home-crew-config) is public, and
-JGit does an anonymous clone when the username is empty. Fill them in only if
-that repository is ever made private.
+`CONFIG_GIT_USERNAME` and `CONFIG_GIT_TOKEN` are **required**:
+[home-crew-config](https://github.com/HomeCrews/home-crew-config) is private, and
+JGit registers no CredentialsProvider when the username is empty - the clone
+then fails with "Authentication is required but no CredentialsProvider has been
+registered", which reads like a missing library rather than a missing password.
+A read-only token is enough.
+
+They are declared `${VAR?...}` in the compose file, so they may be empty (if the
+config repo is ever made public) but may not be absent.
 
 Startup is ordered by healthchecks, not by `depends_on` alone: postgres and
 kafka come up first, then service-discovery, then config-server, then
@@ -120,8 +125,8 @@ rest are on the `dev` environment, which the job declares:
     DOCKERHUB_USERNAME         DOCKERHUB_TOKEN
 
     POSTGRES_USER    POSTGRES_PASSWORD    POSTGRES_DB
-    CONFIG_GIT_USERNAME    CONFIG_GIT_TOKEN    (both empty while the config
-                                                repository is public)
+    CONFIG_GIT_USERNAME    CONFIG_GIT_TOKEN    (required - the config
+                                                repository is private)
 
 Adding a thirteenth service means three edits here: a compose service, an
 entry in the deploy allow-list, and a database in the init script if it needs
