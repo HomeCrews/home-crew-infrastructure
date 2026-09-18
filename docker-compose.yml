@@ -177,11 +177,15 @@ services:
     environment:
       <<: *spring-environment
       JAVA_TOOL_OPTIONS: "-Xms32m -Xmx192m -XX:+UseSerialGC"
-      # Empty is a valid value: home-crew-config is public, and JGit does an
-      # anonymous clone when the username is empty. :- so an absent .env is
-      # silent here rather than fatal. Fill these in if the repo goes private.
-      CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME:-}
-      CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN:-}
+      # ${VAR?...} not ${VAR:-} and not ${VAR:?}. The bare ? errors when the
+      # variable is UNSET but allows it to be empty - so it cannot be forgotten
+      # silently, and it can still be deliberately blank if home-crew-config is
+      # ever made public. With :- a missing .env produced a config-server that
+      # started, registered no CredentialsProvider, and failed the clone with
+      # "Authentication is required but no CredentialsProvider has been
+      # registered" - which reads like a broken dependency, not a missing token.
+      CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME?unset - home-crew-config is private; set it in /opt/homecrew/.env}
+      CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN?unset - home-crew-config is private; set it in /opt/homecrew/.env}
 
     depends_on:
       service-discovery:
