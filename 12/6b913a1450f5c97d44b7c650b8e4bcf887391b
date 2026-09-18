@@ -1,0 +1,23 @@
+.env.example
+  s_31a1eea127e4f8::t_25edae8b1c26da 15-17,19-31
+README.md
+  s_31a1eea127e4f8::t_b678f4b338ea73 32-40,128-129
+docker-compose.yml
+  s_31a1eea127e4f8::t_e6b3e271587dc1 180-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "126b913a1450f5c97d44b7c650b8e4bcf887391b",
+  "prompts": {},
+  "sessions": {
+    "s_31a1eea127e4f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f4f44be-5501-4eca-af87-9e8310efb295",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
