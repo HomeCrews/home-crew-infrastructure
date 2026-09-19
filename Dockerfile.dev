@@ -17,9 +17,23 @@ FROM eclipse-temurin:25-jdk
 # JVM is gone before starting its replacement. It is not in the base image, and
 # without it the fallback silently does nothing - which surfaces only as an
 # occasional "address already in use" after a pom.xml change.
+#
+# git because the shared pom-plugins.xml shells out to it at the validate phase
+# to point core.hooksPath at .githooks. dev-reload.sh skips that execution with
+# -Dhooks.install.skip=true, since those hooks belong to the host's clone rather
+# than to a container - but git is installed anyway, because the assumption that
+# it is on PATH during a Maven build is baked into the build and something else
+# will eventually rely on it. Without it the build dies in its first phase with
+# "Cannot run program git (in directory /app)".
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl procps \
+    && apt-get install -y --no-install-recommends curl procps git \
     && rm -rf /var/lib/apt/lists/*
+
+# /app is a bind mount owned by the host user, not by root. Git refuses to
+# operate on a repository it believes belongs to someone else ("detected dubious
+# ownership"), so any git command in here would fail on that rather than on
+# anything real.
+RUN git config --global --add safe.directory /app
 
 WORKDIR /app
 

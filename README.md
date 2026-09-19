@@ -184,6 +184,14 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
 - **Debuggers are on 5005 upwards**, in the order services are listed in
   `compose.dev.yml`. DevTools restarts happen inside the same JVM, so an
   attached debugger survives them.
+- **The git-hooks install is skipped inside the container.** `pom-plugins.xml`
+  shells out to `git config core.hooksPath .githooks` at the validate phase, so
+  without `-Dhooks.install.skip=true` every build dies in its first phase with
+  `Cannot run program "git" (in directory "/app")`. The plugin's tolerance of
+  exit 128 does not help: git is not *found*, so exec-maven-plugin throws rather
+  than returning a code. Skipping it is right on its own terms too - those hooks
+  belong to your clone, and `.git` is on the bind mount, so a container
+  installing them would be reconfiguring your repository.
 - **Do not run `./mvnw` in a service repository while the stack is up.** The
   container is compiling into that same `target/` over the mount.
 - **On Linux hosts**, the containers' Maven runs as root and will leave
