@@ -85,6 +85,48 @@ jobs:
         run: |
           set -euo pipefail
 
+          # A GitHub secret that was never created, or whose name was typo'd,
+          # expands to an EMPTY STRING rather than staying unset - so `set -u`
+          # never fires and the line written below is `CONFIG_GIT_USERNAME=`.
+          # That key then EXISTS in the .env, and docker-compose.yml guards the
+          # two git credentials with a bare ${VAR?...}, which rejects unset but
+          # deliberately allows empty. `docker compose config --quiet` therefore
+          # passes, and the real failure surfaces two steps later as a JGit
+          # "Authentication is required but no CredentialsProvider has been
+          # registered", an unhealthy config-server, and ten clients that never
+          # start because of depends_on: service_healthy.
+          #
+          # POSTGRES_PASSWORD alone is safe without this check - compose spells
+          # it ${VAR:?}, with the colon, which does reject empty. Relying on
+          # that asymmetry to catch the other four is not a plan.
+          #
+          # Checked here rather than in the compose file because this is the
+          # only place that knows the value came from a secret, so it is the
+          # only place that can name the secret you need to go and set.
+          missing=""
+          for name in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
+                      CONFIG_GIT_USERNAME CONFIG_GIT_TOKEN; do
+            [ -n "${!name-}" ] || missing="$missing $name"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "ERROR: empty or unset secret(s):$missing" >&2
+            echo "" >&2
+            echo "Set them on home-crew-infrastructure under Settings >" >&2
+            echo "Secrets and variables > Actions, or on the 'dev'" >&2
+            echo "environment, or at the organisation level." >&2
+            echo "" >&2
+            echo "Nothing was written to the host; /opt/homecrew/.env still" >&2
+            echo "holds whatever the last successful deploy put there." >&2
+            exit 1
+          fi
+
+          # The remaining secrets this workflow uses - HETZNER_HOST,
+          # HETZNER_USER, HETZNER_SSH_PRIVATE_KEY, DOCKERHUB_USERNAME and
+          # DOCKERHUB_TOKEN - need no check here. Empty values make ssh or
+          # docker login fail on the spot, which is already loud and already
+          # points at the right thing.
+
           # /opt/homecrew/.env used to be hand-placed, undocumented and
           # unrotatable. docker compose reads it for variable substitution, so
           # without it POSTGRES_PASSWORD is unset and `docker compose config`
