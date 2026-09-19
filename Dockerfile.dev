@@ -10,10 +10,15 @@
 # Dockerfile in each service repository.
 FROM eclipse-temurin:25-jdk
 
-# curl so probing a watched container by hand works exactly as it does against
-# a production image, which installs curl for the compose healthchecks.
+# curl so probing a container by hand works exactly as it does against a
+# production image, which installs curl for the compose healthchecks.
+#
+# procps for pkill, which dev-reload.sh needs to be sure the forked application
+# JVM is gone before starting its replacement. It is not in the base image, and
+# without it the fallback silently does nothing - which surfaces only as an
+# occasional "address already in use" after a pom.xml change.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
