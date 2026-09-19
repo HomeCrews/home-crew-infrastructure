@@ -1,0 +1,35 @@
+Dockerfile.dev
+  s_8f1ee334861e7f::t_a09efdc3acf734 1-19
+.gitignore
+  s_8f1ee334861e7f::t_2f19c3873d269f 7-10
+README.md
+  s_8f1ee334861e7f::t_16f33f1526dde6 31-32,34-35,40-100
+  s_8f1ee334861e7f::t_e383fbac4ebb2a 119-122
+dev
+  s_8f1ee334861e7f::t_450ab1f6e04b2a 182-294
+  s_8f1ee334861e7f::t_512c65f882cac2 296,299-300,304-315
+  s_8f1ee334861e7f::t_95af5d8b25b0e8 5-9,17-18
+  s_8f1ee334861e7f::t_090e9780c42984 141-148
+  s_8f1ee334861e7f::t_7c1324c7b2b578 389-398
+  s_8f1ee334861e7f::t_1db86b0a975ce0 31-37
+dev-reload.sh
+  s_8f1ee334861e7f::t_35e48c8d1a1b5c 1-82
+compose.dev.yml
+  s_8f1ee334861e7f::t_eb79c985c935eb 27,32,37,42,47,52,57,62,67,72,77,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "58cf1de8a3ddb281a1f90873e72294a97c8de60d",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}

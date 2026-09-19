@@ -1,0 +1,29 @@
+dev
+  s_8f1ee334861e7f::t_9550fc3c5de966 98
+  s_8f1ee334861e7f::t_5468432d13b845 133
+  s_8f1ee334861e7f::t_ecbc003d7a5ffe 61-67
+  s_8f1ee334861e7f::t_34f60929923d10 260-265
+  s_8f1ee334861e7f::t_3e2a8eed81979d 22-25
+  s_8f1ee334861e7f::t_c6e49eb7c33620 1-21,26-60,68-97,99-132,134-259,266-267
+compose.dev.yml
+  s_8f1ee334861e7f::t_a69e4269373057 2-70
+  s_8f1ee334861e7f::t_bc7733ce71e11a 1
+README.md
+  s_8f1ee334861e7f::t_9d79e7bd762e69 23-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d3d68327056b3f4b9ec5ed8022fd6ea00b623e25",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
