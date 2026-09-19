@@ -28,15 +28,76 @@ needs nothing but this repository unless you ask it to build from source.
 | Command | What it does |
 |---|---|
 | `./dev infra` | postgres, service-discovery, config-server only |
-| `./dev up` | the whole stack, from the published `:dev` images |
-| `./dev up --build` | the whole stack, from your local checkouts |
+| `./dev up` | the whole stack, from your local images |
+| `./dev up --pull` | the whole stack, from the published `:dev` images |
 | `./dev build [svc...]` | package and image a service without starting it |
+| `./dev watch svc...` | hot reload that service, in its container |
+| `./dev unwatch` | put watched services back on their normal images |
 | `./dev down` | stop everything, keep the volumes |
 | `./dev reset` | stop everything and delete the volumes |
 | `./dev ps` / `logs` / `status` | inspect what is running |
 
-The inner loop is `./dev infra`, then run the one service you are editing from
-its own repository on the **default** profile:
+`./dev up` uses **local images only**. `compose.dev.yml` sets
+`pull_policy: never` on all twelve services and builds anything missing from
+your checkout, so a stale `:dev` tag on Docker Hub can never quietly replace the
+code you are working on. `./dev up --pull` is the escape hatch for reproducing
+what is actually deployed.
+
+## Hot reload
+
+    ./dev up                     # the stack, once
+    ./dev watch user-service     # that one service, hot reloading
+
+Then save a `.java` file. No image is rebuilt, no other container is touched,
+and the change is live in a couple of seconds.
+
+What makes it work is that **the watched container holds no copy of your code**.
+`./dev watch` regenerates `.dev/watch.yml` (gitignored) which swaps that one
+service onto `Dockerfile.dev` - a bare JDK, no application - and bind-mounts
+your checkout at `/app`. `dev-reload.sh` then runs two things inside the
+container:
+
+1. a loop that recompiles when a `.java` file changes, and
+2. `mvnw spring-boot:run`, whose DevTools restarts the context when
+   `target/classes` changes underneath it.
+
+So the compile happens inside the container, on the same files your editor is
+writing. The image is built once and never again during the loop; you would only
+rebuild it after changing a dependency in `pom.xml`.
+
+**Both halves poll rather than using inotify, and that is not laziness.** Docker
+Desktop's bind mounts on macOS and Windows do not propagate inotify events from
+the host, so `inotifywait` and anything built on Java's `WatchService` never
+fire - they do not error, they simply see nothing, which is the worst way for a
+watcher to fail. `find -newer` against a stamp file costs one stat per source
+file every two seconds and works everywhere. Spring Boot DevTools has always
+polled, which is why the second half works at all.
+
+A few things worth knowing:
+
+- **A compile error does not take the service down.** `target/classes` keeps the
+  last set that compiled, DevTools sees no change, and the running context is
+  untouched. You get an error in `./dev logs`, not an outage.
+- **A debugger port is published per watched service**, starting at 5005 and
+  counting up in the order you named them. DevTools restarts happen inside the
+  same JVM, so an attached debugger survives them.
+- **Do not run `./mvnw` on the host while a service is watched.** The container
+  is compiling into that same `target/` over the mount.
+- **`mem_limit` for a watched service goes to 1024m**, up from the production
+  192m. It is running a Maven JVM, a forked application JVM, and another Maven
+  JVM on every compile. Watch one or two services, not twelve.
+- **On Linux hosts**, the container's Maven runs as root and will leave
+  root-owned files in the mounted `target/` and `~/.m2`. macOS and Windows are
+  fine, because Docker Desktop maps the ownership.
+
+`spring-boot-devtools` is in all twelve poms as `<optional>true</optional>`. It
+is inert in production regardless: DevTools disables itself when it detects it
+is running from a fully packaged jar, which is how every deployed image starts.
+
+## The inner loop without containers
+
+If you would rather not containerise the service you are editing, `./dev infra`
+brings up only what a host-run service needs:
 
     ./dev infra
     cd ../home-crew-user-service && ./mvnw spring-boot:run
@@ -55,11 +116,10 @@ is told to connect to a name only containers can resolve. Fixing that properly
 means a second listener advertised as `localhost`, which touches both this file
 and `application-docker.yml` in home-crew-config.
 
-`./dev up --build` compiles first, because the Dockerfiles are single-stage and
-begin at `COPY target/*.jar` - `docker compose build` alone would match nothing.
-It expects the sibling repositories at `../home-crew-<service>`.
-
-The raw commands still work, and are what the deploy uses:
+`./dev up` and `./dev build` compile before they image, because the production
+Dockerfiles are single-stage and begin at `COPY target/*.jar` - `docker compose
+build` alone would match nothing. Both expect the sibling repositories at
+`../home-crew-<service>`. `./dev up --pull` needs none of them.
 
     docker compose up -d
     docker compose ps
