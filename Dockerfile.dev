@@ -1,9 +1,9 @@
-# The runtime for `./dev watch`. Deliberately contains no application.
+# The runtime every service uses locally. Deliberately contains no application.
 #
-# A watched service's code arrives on a bind mount and is compiled inside the
-# container by dev-reload.sh, so this image only has to provide a toolchain.
-# That is also why every watched service shares one image: there is nothing
-# service-specific to bake in, and building it once beats building twelve.
+# A service's code arrives on a bind mount and is compiled inside the container
+# by dev-reload.sh, so this image only has to provide a toolchain. That is also
+# why all twelve services share one image: there is nothing service-specific to
+# bake in, and building it once beats building twelve.
 #
 # JDK, not JRE, unlike the production Dockerfiles - javac has to be in here.
 # Nothing in this file is used by a deployed image; those are built from the

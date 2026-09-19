@@ -1,7 +1,8 @@
 #!/bin/sh
-# Runs INSIDE a watched service's container. Started by ./dev watch, never by
-# hand. Two jobs, in one container, so that a code change on your machine turns
-# into a restarted application without rebuilding an image:
+# Runs INSIDE every service container locally. Started by ./dev up via the
+# entrypoint in compose.dev.yml, never by hand. Two jobs, in one container, so
+# that a code change on your machine turns into a restarted application without
+# rebuilding an image:
 #
 #   1. poll the bind-mounted sources and recompile when a .java file changes
 #   2. run the application, so DevTools restarts the context when

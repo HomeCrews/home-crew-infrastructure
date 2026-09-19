@@ -1,65 +1,33 @@
 #!/bin/sh
-# One command to run HomeCrew locally.
+# HomeCrew, running locally, in watch mode.
 #
-#   ./dev infra [svc...]   postgres, service-discovery, config-server
-#   ./dev up               the whole stack, from your local images
-#   ./dev up --pull        the whole stack, from the published :dev images
-#   ./dev build [svc...]   package and image a service, do not start it
-#   ./dev watch svc...     hot reload: recompiles in-container on every save
-#   ./dev unwatch          put watched services back on their normal images
-#   ./dev down             stop everything, keep the data
-#   ./dev reset            stop everything and DELETE the volumes
-#   ./dev ps               one line per container, with health
-#   ./dev logs [svc...]    follow logs
-#   ./dev status           health plus the URLs worth opening
+#   ./dev up             start everything, hot reloading
+#   ./dev down           stop everything (the volumes are kept)
+#   ./dev logs [svc...]  follow logs
 #
-# The sibling service repositories are expected at ../home-crew-<service>,
-# which is how a full HomeCrew checkout is laid out. Only `build`, `watch` and
-# `up` need them; `up --pull` works with this repo alone.
+# There is no non-watch mode. Every service runs from its sibling checkout at
+# ../home-crew-<service>, compiled inside its own container, so saving a .java
+# file restarts that one service and nothing else. No image is rebuilt in the
+# loop and nothing is pulled from Docker Hub.
+#
+# Your machine needs docker and a .env. It does NOT need a JDK or Maven - the
+# containers do the compiling.
+#
+# To wipe the databases and Kafka's log, which ./dev deliberately will not do
+# for you:
+#
+#     docker compose down -v
 
 set -eu
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
-
-# Resolved once, so error messages name /path/to/homecrew/home-crew-user-service
-# rather than /path/to/homecrew/home-crew-infrastructure/../home-crew-user-service.
 SIBLINGS=$(cd "$ROOT/.." && pwd)
 
-BASE="-f $ROOT/docker-compose.yml"
-OVERRIDE="-f $ROOT/compose.dev.yml"
+FILES="-f $ROOT/docker-compose.yml -f $ROOT/compose.dev.yml"
 
-# Written by ./dev watch, removed by ./dev unwatch, gitignored. Generated
-# rather than committed because it names specific services and specific debug
-# ports, which is a choice you make per session, not per repository.
-WATCH_DIR="$ROOT/.dev"
-WATCH_YML="$WATCH_DIR/watch.yml"
-WATCH_LIST="$WATCH_DIR/watched"
-
-# Every app service in docker-compose.yml, in dependency order. The compose
-# service name is the repository name minus the home-crew- prefix, and that
-# correspondence is exact - which is what lets this one list drive both the
-# Maven builds and the compose commands.
-APPS="service-discovery config-server api-gateway auth-service user-service
-admin-service booking-service worker-service notification-service
-payment-service xp-service assignment-service"
-
-# What a service run from your IDE actually needs reachable on localhost.
-#
-# Kafka is deliberately NOT here. No service has spring-kafka on its classpath
-# yet, so the broker costs 512m and a 40s start period and nothing consumes it.
-# Add it explicitly the day that changes:
-#
-#     ./dev infra kafka
-#
-# Be aware of one thing when you do: KAFKA_ADVERTISED_LISTENERS is
-# PLAINTEXT://kafka:9092, so a client on the HOST connects to localhost:9092,
-# is told to talk to "kafka:9092", and fails to resolve it. Containers are
-# fine. Fixing it means a second listener advertised as localhost, which is a
-# change to docker-compose.yml and to application-docker.yml in
-# home-crew-config, so it is not done pre-emptively.
-INFRA="postgres service-discovery config-server"
-
-# ------------------------------------------------------------------ helpers --
+SERVICES="service-discovery config-server api-gateway auth-service
+user-service admin-service booking-service worker-service
+notification-service payment-service xp-service assignment-service"
 
 die() {
     printf '%s\n' "$@" >&2
@@ -67,8 +35,6 @@ die() {
 }
 
 info() {
-    # Colour only when stdout is a terminal, so `./dev logs > file` and CI
-    # capture do not collect escape sequences.
     if [ -t 1 ]; then
         printf '\033[36m==>\033[0m %s\n' "$1"
     else
@@ -77,8 +43,8 @@ info() {
 }
 
 # docker compose reads .env for variable SUBSTITUTION, and POSTGRES_PASSWORD is
-# ${VAR:?} in docker-compose.yml, so without .env every subcommand here fails
-# with a compose error rather than something actionable. Say it once, properly.
+# ${VAR:?} in docker-compose.yml, so without .env every command here fails with
+# a compose error rather than something actionable. Say it once, properly.
 require_env() {
     [ -f "$ROOT/.env" ] || die \
         "$ROOT/.env is missing." \
@@ -97,247 +63,58 @@ require_docker() {
         "docker is installed but the daemon is not responding. Start Docker and retry."
 }
 
-# The projects target Java 25 and this is the one place a dev machine's default
-# JDK routinely differs, so resolve it rather than inheriting whatever is
-# active. A lower JDK fails every module at compile with "release version 25
-# not supported", which reads like twelve broken projects instead of one wrong
-# JAVA_HOME.
-resolve_jdk() {
-    want=$(sed -n 's|.*<java.version>\([0-9][0-9]*\)</java.version>.*|\1|p' \
-        "$SIBLINGS/home-crew-user-service/pom.xml" 2>/dev/null | head -1)
-    want=${want:-25}
-
-    if [ "$(uname -s)" = "Darwin" ] && /usr/libexec/java_home -v "$want" >/dev/null 2>&1; then
-        JAVA_HOME=$(/usr/libexec/java_home -v "$want")
-        export JAVA_HOME
-        return
-    fi
-
-    have=""
-    if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
-        have=$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 |
-            sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p')
-    fi
-    [ -n "$have" ] && [ "$have" -ge "$want" ] 2>/dev/null && return
-
-    die "No JDK $want found. Point JAVA_HOME at one and retry." \
-        "  macOS:  export JAVA_HOME=\$(/usr/libexec/java_home -v $want)"
+# Every service is a bind mount of a sibling repository. A missing one would not
+# fail loudly: Docker would happily create an empty directory and the container
+# would die on a missing pom, twelve lines deep in a log. Check first.
+require_siblings() {
+    missing=""
+    for svc in $SERVICES; do
+        [ -f "$SIBLINGS/home-crew-$svc/pom.xml" ] || missing="$missing home-crew-$svc"
+    done
+    [ -z "$missing" ] || die \
+        "These checkouts are missing or incomplete:$missing" \
+        "" \
+        "Every service is bind-mounted from a sibling directory, so they all have" \
+        "to be cloned next to this one:" \
+        "" \
+        "    cd $SIBLINGS" \
+        "    for r in$missing; do git clone git@github.com:HomeCrews/\$r.git; done"
 }
 
-# shellcheck disable=SC2086  # $BASE and $OVERRIDE are deliberately split
+# shellcheck disable=SC2086  # $FILES is deliberately split
 compose() {
     require_env
     require_docker
-    ( cd "$ROOT" && docker compose $BASE "$@" )
-}
-
-# shellcheck disable=SC2086
-compose_dev() {
-    require_env
-    require_docker
-    ( cd "$ROOT" && docker compose $BASE $OVERRIDE "$@" )
-}
-
-# shellcheck disable=SC2086
-compose_watch() {
-    require_env
-    require_docker
-    [ -f "$WATCH_YML" ] || die "nothing is being watched; run ./dev watch <svc> first."
-    ( cd "$ROOT" && docker compose $BASE $OVERRIDE -f "$WATCH_YML" "$@" )
-}
-
-repo_for() {
-    dir="$SIBLINGS/home-crew-$1"
-    [ -d "$dir" ] || die \
-        "Expected a checkout at $dir but it is not there." \
-        "" \
-        "    git clone git@github.com:HomeCrews/home-crew-$1.git $dir" \
-        "" \
-        "Building from source needs the sibling repositories. ./dev up without" \
-        "--build needs none of them."
-    printf '%s' "$dir"
-}
-
-# ----------------------------------------------------------------- commands --
-
-cmd_build() {
-    targets=${*:-$APPS}
-    resolve_jdk
-    info "JAVA_HOME=$JAVA_HOME"
-
-    # The jar first, always. The Dockerfiles are single-stage and begin at
-    # COPY target/*.jar, so `docker compose build` against a repo that has
-    # never been packaged fails on a glob that matches nothing.
-    for svc in $targets; do
-        dir=$(repo_for "$svc")
-        info "packaging $svc"
-        ( cd "$dir" && chmod +x mvnw && ./mvnw --batch-mode -q -DskipTests package )
-    done
-
-    info "building images"
-    # shellcheck disable=SC2086
-    compose_dev build $targets
-}
-
-cmd_watch() {
-    [ $# -gt 0 ] || die \
-        "watch: name at least one service." \
-        "    ./dev watch user-service" \
-        "    ./dev watch user-service booking-service"
-
-    for svc in "$@"; do
-        case " $(echo "$APPS" | tr '\n' ' ') " in
-            *" $svc "*) ;;
-            *) die "watch: '$svc' is not a service in docker-compose.yml." \
-                   "Valid names: $(echo "$APPS" | tr '\n' ' ')" ;;
-        esac
-        repo_for "$svc" >/dev/null
-    done
-
-    mkdir -p "$WATCH_DIR"
-
-    # One shared runtime image for every watched service, and the service's own
-    # `build.context` from compose.dev.yml is replaced by this repository - the
-    # image copies no application in, so the service's context is irrelevant to
-    # it. The code arrives on the bind mount instead.
-    {
-        printf '# GENERATED by ./dev watch. Do not edit; do not commit.\n'
-        printf '# Rewritten on every ./dev watch, removed by ./dev unwatch.\n'
-        printf 'services:\n'
-        port=5005
-        for svc in "$@"; do
-            cat <<EOF
-  $svc:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    # 192m is the production figure and it is not enough here: this container
-    # runs a Maven JVM, a forked application JVM, and another Maven JVM every
-    # time the compile loop fires.
-    mem_limit: 1024m
-    volumes:
-      - $SIBLINGS/home-crew-$svc:/app
-      - \${HOME}/.m2:/root/.m2
-      - $ROOT/dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m, and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m as well and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      # Only the application JVM gets the debug agent. Putting it in
-      # JAVA_TOOL_OPTIONS would make Maven and every compile-loop JVM try to
-      # bind the same port, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$port"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-    ports:
-      - "$port:$port"
-EOF
-            port=$((port + 1))
-        done
-    } >"$WATCH_YML"
-
-    printf '%s\n' "$@" >"$WATCH_LIST"
-
-    info "watching: $*"
-    # --build so the shared runtime image exists. Only the named services are
-    # recreated; the rest of the stack is left exactly as it is, which is the
-    # point.
-    compose_watch up -d --build "$@"
-
-    printf '\n'
-    port=5005
-    for svc in "$@"; do
-        printf '  %-22s debugger on localhost:%s\n' "$svc" "$port"
-        port=$((port + 1))
-    done
-    cat <<EOF
-
-The first start is slow: Maven resolves the dependency tree and compiles from
-cold inside the container. After that, save a .java file and watch it:
-
-    ./dev logs $1
-
-You should see "change detected, recompiling", then DevTools restarting the
-context. No image is rebuilt, and no other container is touched.
-
-While a service is watched, do not run ./mvnw in its repository on the host -
-the container is compiling into that same target/ directory over the mount.
-EOF
-}
-
-cmd_unwatch() {
-    [ -f "$WATCH_LIST" ] || die "nothing is being watched."
-
-    watched=$(tr '\n' ' ' <"$WATCH_LIST")
-    info "returning to normal images: $watched"
-
-    # Read the list, then remove the generated files, then recreate from the
-    # plain dev configuration. Order matters: compose_watch needs watch.yml to
-    # still exist, so the containers come down before it is deleted.
-    # shellcheck disable=SC2086
-    compose_watch stop $watched
-    # shellcheck disable=SC2086
-    compose_watch rm -f $watched
-
-    rm -f "$WATCH_YML" "$WATCH_LIST"
-    rmdir "$WATCH_DIR" 2>/dev/null || true
-
-    # shellcheck disable=SC2086
-    cmd_build $watched
-    # shellcheck disable=SC2086
-    compose_dev up -d $watched
+    ( cd "$ROOT" && docker compose $FILES "$@" )
 }
 
 cmd_up() {
-    pull=no
-    for arg in "$@"; do
-        case "$arg" in
-            --pull) pull=yes ;;
-            *) die "up: unknown option '$arg' (only --pull)" ;;
-        esac
-    done
+    require_siblings
+    info "starting every service in watch mode"
 
-    if [ "$pull" = yes ]; then
-        # The escape hatch, for reproducing what is actually deployed. Nothing
-        # in the dev loop should need it.
-        info "refreshing the published :dev images from Docker Hub"
-        compose pull
-        compose up -d
-    else
-        # Local images only. compose.dev.yml sets pull_policy: never on every
-        # service, so a missing or stale image is built from your checkout
-        # rather than silently pulled - which is the whole point while you are
-        # developing. `up --build` rebuilds every service; use ./dev build
-        # <svc> when you only changed one.
-        cmd_build
-        info "starting the stack from your local build"
-        compose_dev up -d
-    fi
-    printf '\n'
-    cmd_status
-}
+    # --build so the shared dev runtime image exists. It is one FROM and an
+    # apt-get, so rebuilding it is cheap and always doing it means a change to
+    # Dockerfile.dev cannot be silently ignored.
+    compose up -d --build
 
-cmd_infra() {
-    extra="$*"
-    # shellcheck disable=SC2086
-    info "starting $INFRA $extra"
-    # shellcheck disable=SC2086
-    compose up -d $INFRA $extra
-    printf '\n'
-    cmd_status
     cat <<'EOF'
 
-Run the service you are working on from its own repository, on the default
-profile - it will find config-server, Eureka and Postgres on localhost:
+Everything is up. The FIRST start is slow: each container resolves its
+dependency tree and compiles from cold. Watch it happen with
 
-    cd ../home-crew-user-service && ./mvnw spring-boot:run
+    ./dev logs
 
-Do NOT set SPRING_PROFILES_ACTIVE=docker there: the docker profile points at
-compose hostnames, which do not resolve from your machine.
+After that, save a .java file. The log for that service shows "change
+detected, recompiling", then DevTools restarting the context. No image is
+rebuilt and no other service is touched.
+
+    gateway          http://localhost:8080
+    eureka           http://localhost:8761
+    config-server    http://localhost:8888/actuator/health
+    served config    http://localhost:8888/userservice/docker
+
+Debuggers are on 5005 upwards, in the order the services are listed in
+compose.dev.yml. Attached debuggers survive a DevTools restart.
 EOF
 }
 
@@ -346,61 +123,21 @@ cmd_down() {
     compose down
 }
 
-cmd_reset() {
-    printf 'This deletes postgres_data and kafka_data. Databases, topics and the\n'
-    printf 'KRaft cluster id all go. Type "yes" to continue: '
-    read -r answer
-    [ "$answer" = yes ] || die "aborted; nothing was removed."
-    info "stopping everything and removing the volumes"
-    compose down -v
-}
-
-cmd_ps() {
-    compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
-}
-
 cmd_logs() {
-    # shellcheck disable=SC2086
     compose logs -f --tail 100 "$@"
 }
-
-cmd_status() {
-    cmd_ps
-    cat <<'EOF'
-
-    gateway            http://localhost:8080
-    eureka dashboard   http://localhost:8761
-    config-server      http://localhost:8888/actuator/health
-    a served config    http://localhost:8888/userservice/docker
-
-The last one is the quickest check that the whole config chain works. It must
-return JSON containing "${DB_PASSWORD:homecrew}" as a literal - if you see a
-real password there, something is resolving placeholders server-side and the
-scheme in home-crew-config/README.md is broken.
-EOF
-}
-
-# --------------------------------------------------------------------- main --
 
 cmd=${1:-help}
 [ $# -gt 0 ] && shift
 
 case "$cmd" in
-    infra)   cmd_infra "$@" ;;
-    up)      cmd_up "$@" ;;
-    build)   cmd_build "$@" ;;
-    watch)   cmd_watch "$@" ;;
-    unwatch) cmd_unwatch ;;
-    down)    cmd_down ;;
-    reset)   cmd_reset ;;
-    ps)      cmd_ps ;;
-    logs)    cmd_logs "$@" ;;
-    status)  cmd_status ;;
+    up)   cmd_up ;;
+    down) cmd_down ;;
+    logs) cmd_logs "$@" ;;
     help|-h|--help)
         # Print the header comment and stop at the first line that is not one,
-        # so this cannot drift out of step with the block above when it is
-        # edited - a fixed line range silently did.
+        # so this cannot drift out of step with the block above.
         awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
         ;;
-    *)      die "unknown command '$cmd'; try ./dev help" ;;
+    *)    die "unknown command '$cmd'; try ./dev help" ;;
 esac

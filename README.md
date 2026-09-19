@@ -22,40 +22,37 @@ code; it is what runs the other fourteen.
     cp .env.example .env
     ./dev up
 
-`./dev` wraps the compose invocations for the cases that come up daily. It
-needs nothing but this repository unless you ask it to build from source.
+Three commands, and that is the whole interface:
 
 | Command | What it does |
 |---|---|
-| `./dev infra` | postgres, service-discovery, config-server only |
-| `./dev up` | the whole stack, from your local images |
-| `./dev up --pull` | the whole stack, from the published `:dev` images |
-| `./dev build [svc...]` | package and image a service without starting it |
-| `./dev watch svc...` | hot reload that service, in its container |
-| `./dev unwatch` | put watched services back on their normal images |
-| `./dev down` | stop everything, keep the volumes |
-| `./dev reset` | stop everything and delete the volumes |
-| `./dev ps` / `logs` / `status` | inspect what is running |
+| `./dev up` | start everything, hot reloading |
+| `./dev down` | stop everything, keeping the volumes |
+| `./dev logs [svc...]` | follow logs |
 
-`./dev up` uses **local images only**. `compose.dev.yml` sets
-`pull_policy: never` on all twelve services and builds anything missing from
-your checkout, so a stale `:dev` tag on Docker Hub can never quietly replace the
-code you are working on. `./dev up --pull` is the escape hatch for reproducing
-what is actually deployed.
+**There is no non-watch mode.** Every service runs from its sibling checkout at
+`../home-crew-<service>`, compiled inside its own container. Your machine needs
+docker and a `.env`; it does **not** need a JDK or Maven, because the containers
+do the compiling.
+
+`.env` is gitignored and is **required**, not optional: `POSTGRES_PASSWORD` is
+declared `${VAR:?}` in the compose file, so `docker compose config` exits
+non-zero without one. That is deliberate - the deploy runs
+`docker compose config --quiet`, and until this was a hard failure it passed
+happily against a host with no `.env` at all.
+
+To wipe the databases and Kafka's log, which `./dev` deliberately will not do
+for you: `docker compose down -v`.
 
 ## Hot reload
 
-    ./dev up                     # the stack, once
-    ./dev watch user-service     # that one service, hot reloading
+Save a `.java` file. That service restarts in a couple of seconds; nothing else
+is touched, and no image is rebuilt.
 
-Then save a `.java` file. No image is rebuilt, no other container is touched,
-and the change is live in a couple of seconds.
-
-What makes it work is that **the watched container holds no copy of your code**.
-`./dev watch` regenerates `.dev/watch.yml` (gitignored) which swaps that one
-service onto `Dockerfile.dev` - a bare JDK, no application - and bind-mounts
-your checkout at `/app`. `dev-reload.sh` then runs two things inside the
-container:
+What makes it work is that **no container holds a copy of your code**.
+`compose.dev.yml` puts every service on `Dockerfile.dev` - a bare JDK, no
+application - and bind-mounts its checkout at `/app`. `dev-reload.sh` then runs
+two things inside each container:
 
 1. a loop that recompiles when a `.java` file changes, and
 2. `mvnw spring-boot:run`, whose DevTools restarts the context when
@@ -63,7 +60,8 @@ container:
 
 So the compile happens inside the container, on the same files your editor is
 writing. The image is built once and never again during the loop; you would only
-rebuild it after changing a dependency in `pom.xml`.
+rebuild it after changing a dependency in `pom.xml`, and `./dev up` always
+passes `--build` so even that is handled.
 
 **Both halves poll rather than using inotify, and that is not laziness.** Docker
 Desktop's bind mounts on macOS and Windows do not propagate inotify events from
@@ -73,77 +71,47 @@ watcher to fail. `find -newer` against a stamp file costs one stat per source
 file every two seconds and works everywhere. Spring Boot DevTools has always
 polled, which is why the second half works at all.
 
-A few things worth knowing:
-
-- **A compile error does not take the service down.** `target/classes` keeps the
-  last set that compiled, DevTools sees no change, and the running context is
-  untouched. You get an error in `./dev logs`, not an outage.
-- **A debugger port is published per watched service**, starting at 5005 and
-  counting up in the order you named them. DevTools restarts happen inside the
-  same JVM, so an attached debugger survives them.
-- **Do not run `./mvnw` on the host while a service is watched.** The container
-  is compiling into that same `target/` over the mount.
-- **`mem_limit` for a watched service goes to 1024m**, up from the production
-  192m. It is running a Maven JVM, a forked application JVM, and another Maven
-  JVM on every compile. Watch one or two services, not twelve.
-- **On Linux hosts**, the container's Maven runs as root and will leave
-  root-owned files in the mounted `target/` and `~/.m2`. macOS and Windows are
-  fine, because Docker Desktop maps the ownership.
-
 `spring-boot-devtools` is in all twelve poms as `<optional>true</optional>`. It
 is inert in production regardless: DevTools disables itself when it detects it
 is running from a fully packaged jar, which is how every deployed image starts.
 
-## The inner loop without containers
+### Memory
 
-If you would rather not containerise the service you are editing, `./dev infra`
-brings up only what a host-run service needs:
+Twelve watched services at `DEV_SERVICE_MEM` (1g by default) plus postgres and
+kafka is **13g of ceiling**. Those are limits rather than reservations, so real
+usage is more like 400-700m per service, but Docker Desktop's VM defaults to
+roughly half your host RAM. On a 16g machine, either raise the VM to 12g in
+Docker Desktop's settings or lower the ceiling in `.env`:
 
-    ./dev infra
-    cd ../home-crew-user-service && ./mvnw spring-boot:run
+    DEV_SERVICE_MEM=768m
 
-config-server (8888), Eureka (8761) and Postgres (5432) are all published to
-localhost, which is exactly what the default profile in
-[home-crew-config](https://github.com/HomeCrews/home-crew-config) points at. Do
-not set `SPRING_PROFILES_ACTIVE=docker` for a service run this way - the docker
-profile points at compose hostnames, which do not resolve from your machine.
+Each container is running three JVMs - Maven, the forked application, and
+another Maven on every compile - which is why the production figure of 192m is
+nowhere near enough.
 
-`./dev infra` deliberately leaves **kafka** out: no service has `spring-kafka`
-on its classpath yet, so the broker costs 512m and a 40s start period and
-nothing consumes it. Add it with `./dev infra kafka` when that changes - and
-note that `KAFKA_ADVERTISED_LISTENERS` is `kafka:9092`, so a client on the host
-is told to connect to a name only containers can resolve. Fixing that properly
-means a second listener advertised as `localhost`, which touches both this file
-and `application-docker.yml` in home-crew-config.
+### Things worth knowing
 
-`./dev up` and `./dev build` compile before they image, because the production
-Dockerfiles are single-stage and begin at `COPY target/*.jar` - `docker compose
-build` alone would match nothing. Both expect the sibling repositories at
-`../home-crew-<service>`. `./dev up --pull` needs none of them.
-
-    docker compose up -d
-    docker compose ps
-
-`.env` is gitignored and is **required**, not optional: `POSTGRES_PASSWORD` is
-declared `${VAR:?}` in the compose file, so `docker compose config` exits
-non-zero without one. That is deliberate - the deploy runs
-`docker compose config --quiet`, and until this was a hard failure it passed
-happily against a host with no `.env` at all.
-
-`CONFIG_GIT_USERNAME` and `CONFIG_GIT_TOKEN` are **required**:
-[home-crew-config](https://github.com/HomeCrews/home-crew-config) is private, and
-JGit registers no CredentialsProvider when the username is empty - the clone
-then fails with "Authentication is required but no CredentialsProvider has been
-registered", which reads like a missing library rather than a missing password.
-A read-only token is enough.
-
-They are declared `${VAR?...}` in the compose file, so they may be empty (if the
-config repo is ever made public) but may not be absent.
-
-Startup is ordered by healthchecks, not by `depends_on` alone: postgres and
-kafka come up first, then service-discovery, then config-server, then
-everything else. Wait for `healthy` rather than `running` - a container that
-is running but not yet healthy will refuse connections.
+- **The first `./dev up` is slow.** Every container resolves its dependency tree
+  and compiles from cold, twelve of them at once against one `~/.m2`. Concurrent
+  Maven against a shared local repository is not something Maven loves; if a
+  service falls over on the very first run, `./dev up` again and it will find
+  the cache warm.
+- **`service-discovery` and `config-server` get a 240s health `start_period`**
+  in the dev override, against 20s in the base file. Everything else is gated
+  behind them by `depends_on: service_healthy`, and a cold Maven compile does
+  not fit in the production budget - they would be marked unhealthy and the
+  other ten would never start.
+- **A compile error does not take a service down.** `target/classes` keeps the
+  last set that compiled, DevTools sees no change, and the running context is
+  untouched. You get an error in `./dev logs`, not an outage.
+- **Debuggers are on 5005 upwards**, in the order services are listed in
+  `compose.dev.yml`. DevTools restarts happen inside the same JVM, so an
+  attached debugger survives them.
+- **Do not run `./mvnw` in a service repository while the stack is up.** The
+  container is compiling into that same `target/` over the mount.
+- **On Linux hosts**, the containers' Maven runs as root and will leave
+  root-owned files in the mounted `target/` and `~/.m2`. macOS and Windows are
+  fine, because Docker Desktop maps the ownership.
 
 ## Topology
 
