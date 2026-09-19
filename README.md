@@ -105,6 +105,26 @@ Each container is running three JVMs - Maven, the forked application, and
 another Maven on every compile - which is why the production figure of 192m is
 nowhere near enough.
 
+### Tuning the watcher
+
+`DEV_RELOAD_INTERVAL` in `.env` is how often `dev-reload.sh` checks the mount,
+in seconds. The default of 2 picks a single save up within two seconds, and a
+burst of saves collapses into one compile: the loop is serial, so it is not
+polling while a compile is in flight, and the stamp is taken *before* the
+compile rather than after, so nothing saved during one is lost.
+
+Raise it if you save in heavy bursts and would rather have fewer compiles than
+faster feedback on a single save:
+
+    DEV_RELOAD_INTERVAL=5
+
+Going below 1 buys nothing - the compile is the slow part, not the polling.
+
+Unlike `DEV_SERVICE_MEM`, this one has to reach the **container** rather than
+just compose, so `compose.dev.yml` passes it through in every service's
+`environment`. Setting it in `.env` alone would do nothing, which is the same
+trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
+
 ### Things worth knowing
 
 - **The first `./dev up` is slow.** Every container resolves its dependency tree

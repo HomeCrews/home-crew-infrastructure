@@ -45,6 +45,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5005:5005"
     healthcheck:
@@ -76,6 +81,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5006:5006"
     healthcheck:
@@ -107,6 +117,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5007:5007"
 
@@ -135,6 +150,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5008:5008"
 
@@ -163,6 +183,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5009"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5009:5009"
 
@@ -191,6 +216,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5010:5010"
 
@@ -219,6 +249,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5011:5011"
 
@@ -247,6 +282,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5012"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5012:5012"
 
@@ -275,6 +315,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5013:5013"
 
@@ -303,6 +348,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5014"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5014:5014"
 
@@ -331,6 +381,11 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5015"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5015:5015"
 
@@ -359,5 +414,10 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5016"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Passed through explicitly. .env drives compose SUBSTITUTION, not
+      # container environment, so dev-reload.sh would never see it otherwise -
+      # it would silently fall back to its own default and the knob in .env
+      # would look broken rather than absent.
+      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5016:5016"
