@@ -89,7 +89,13 @@ services:
     image: apache/kafka:4.1.0
     container_name: homecrew-kafka
 
-    mem_limit: 384m
+    # 512m, not 384m. The broker alone is -Xmx256m plus metaspace, code cache,
+    # direct buffers and thread stacks, which lands around 350m RSS - so at
+    # 384m there was no room for a second process of any kind, and the
+    # healthcheck below is a second process. Budget note: this raises the sum
+    # of all mem_limits in this file to 3200m, so confirm the host still has
+    # headroom before assuming this is free.
+    mem_limit: 512m
 
     ports:
       - "9092:9092"
@@ -115,15 +121,32 @@ services:
       - kafka_data:/var/lib/kafka/data
 
     healthcheck:
+      # KAFKA_HEAP_OPTS is overridden for the probe, and only for the probe.
+      # kafka-broker-api-versions.sh runs through bin/kafka-run-class.sh, which
+      # reads the SAME KAFKA_HEAP_OPTS set above - so every interval spawned a
+      # second JVM asking for -Xms128m inside a cgroup the broker had already
+      # nearly filled. Whoever lost that is decided by the kernel OOM killer,
+      # and it picks the largest RSS, which is the broker.
+      #
+      # 20s timeout because this is a JVM CLI, not a ping. Cold start plus an
+      # AdminClient bootstrap is routinely 5-10s on a small host, so the old 5s
+      # killed the probe mid-handshake. Ten kills in a row (retries x interval)
+      # flipped the container to unhealthy and one later success flipped it
+      # back, so `depends_on: service_healthy` passed or failed depending on
+      # when the deploy happened to sample it - a deploy that fails only
+      # sometimes, on an unchanged commit.
+      #
+      # 30s interval rather than 10s: a probe that can take 20s must not be
+      # able to overlap the next one.
       test:
         [
           "CMD-SHELL",
-          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1",
+          "KAFKA_HEAP_OPTS='-Xms16m -Xmx64m' /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1",
         ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 40s
 
     networks:
       - homecrew
