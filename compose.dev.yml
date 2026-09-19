@@ -24,47 +24,59 @@ services:
   service-discovery:
     build:
       context: ../home-crew-service-discovery
+    pull_policy: never
 
   config-server:
     build:
       context: ../home-crew-config-server
+    pull_policy: never
 
   api-gateway:
     build:
       context: ../home-crew-api-gateway
+    pull_policy: never
 
   auth-service:
     build:
       context: ../home-crew-auth-service
+    pull_policy: never
 
   user-service:
     build:
       context: ../home-crew-user-service
+    pull_policy: never
 
   admin-service:
     build:
       context: ../home-crew-admin-service
+    pull_policy: never
 
   booking-service:
     build:
       context: ../home-crew-booking-service
+    pull_policy: never
 
   worker-service:
     build:
       context: ../home-crew-worker-service
+    pull_policy: never
 
   notification-service:
     build:
       context: ../home-crew-notification-service
+    pull_policy: never
 
   payment-service:
     build:
       context: ../home-crew-payment-service
+    pull_policy: never
 
   xp-service:
     build:
       context: ../home-crew-xp-service
+    pull_policy: never
 
   assignment-service:
     build:
       context: ../home-crew-assignment-service
+    pull_policy: never
