@@ -5,14 +5,16 @@
 # Watches the bind-mounted checkout and reacts at the cheapest level that will
 # actually pick the change up:
 #
-#   src/main/**   (java, resources, anything)  ->  mvn compile
+#   src/main/**   (java, resources, anything)  ->  compile
 #                 DevTools sees target/classes change and restarts the context
-#                 in-process. ~2-5s. This is the common case.
+#                 in-process. This is the common case: roughly 3-5s with mvnd,
+#                 8-15s without, because a cold `mvn` spends most of its time
+#                 booting a JVM rather than compiling.
 #
-#   pom.xml, .mvn/**                           ->  mvn compile + restart the app
+#   pom.xml, .mvn/**                           ->  compile + restart the app
 #                 A dependency change cannot be hot-reloaded: spring-boot:run
 #                 fixed its classpath when it launched, so the process has to go.
-#                 ~20-40s, because Maven re-resolves.
+#                 30-60s, because Maven re-resolves and the JVM starts cold.
 #
 # src/test is deliberately not watched. A test edit should not bounce the
 # running service.
@@ -40,6 +42,43 @@ chmod +x mvnw 2>/dev/null || true
 
 log() {
     printf '[dev-reload] %s\n' "$1"
+}
+
+# mvnd flags, explained once because two of them are load-bearing:
+#
+#   daemonStorage  defaults to ~/.m2/mvnd, and ~/.m2 is bind-mounted and SHARED
+#                  by all twelve containers. They would see each other's daemons
+#                  in one registry and try to connect to sockets that do not
+#                  exist in their own namespace. /tmp is per-container.
+#   idleTimeout    so that the ten services you are not editing let their daemon
+#                  go instead of each holding a JVM for the default three hours.
+#   jvmArgs        the daemon is a THIRD persistent JVM in a 1g container,
+#                  alongside the Maven that launched the app and the app itself.
+MVND_FLAGS="-Dmvnd.daemonStorage=/tmp/mvnd -Dmvnd.idleTimeout=15m -Dmvnd.jvmArgs=-Xmx320m"
+
+# Probe rather than trust the image: the mvnd install in Dockerfile.dev is
+# deliberately non-fatal, so it may simply not be here. A slower loop is a far
+# better outcome than a loop that does not work.
+COMPILE="./mvnw"
+if command -v mvnd >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    if mvnd $MVND_FLAGS --version >/dev/null 2>&1; then
+        COMPILE="mvnd"
+    else
+        log "mvnd is installed but would not run; falling back to ./mvnw"
+    fi
+fi
+
+# spring-boot:run always uses the wrapper, never mvnd. mvnd is built for build
+# goals that finish; parking a process that runs until you stop the container on
+# one of its daemons is not what it is for.
+run_compile() {
+    if [ "$COMPILE" = mvnd ]; then
+        # shellcheck disable=SC2086
+        mvnd $MVND_FLAGS --batch-mode -q compile
+    else
+        ./mvnw --batch-mode -q compile
+    fi
 }
 
 start_app() {
@@ -93,8 +132,9 @@ build_changed() {
 # marked as already seen.
 touch "$SRC_STAMP" "$BUILD_STAMP"
 
+log "compiling with: $COMPILE"
 log "resolving dependencies and compiling once - the first run is the slow one"
-./mvnw --batch-mode -q compile
+run_compile
 
 start_app
 
@@ -119,7 +159,7 @@ while :; do
 
         # Compile first. A pom that does not resolve must leave the running
         # application alone rather than killing it and failing to come back.
-        if ./mvnw --batch-mode -q compile; then
+        if run_compile; then
             stop_app
             start_app
         else
@@ -139,7 +179,7 @@ while :; do
         # is left holding the last set that did compile, DevTools sees no
         # change, and the running context is untouched - so a typo costs you an
         # error message, not an outage.
-        if ./mvnw --batch-mode -q compile; then
+        if run_compile; then
             if [ -n "$APP_PID" ]; then
                 log "recompiled - DevTools will restart the context"
             else
