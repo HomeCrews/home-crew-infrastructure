@@ -1,82 +1,363 @@
-# Dev override. Builds each service from your local checkout instead of
-# pulling mthanuj/homecrew-*:dev from Docker Hub.
+# Dev override: every service runs from your checkout, hot reloading.
+#
+# Used together with docker-compose.yml, which ./dev does for you:
+#
+#     docker compose -f docker-compose.yml -f compose.dev.yml up -d
+#
+# LOCAL IMAGES ONLY. Every service here is rebuilt from Dockerfile.dev in this
+# repository and tagged homecrew-dev-runtime:jdk25, which replaces the
+# mthanuj/homecrew-*:dev image from the base file. Nothing is ever pulled from
+# Docker Hub, so a stale published tag cannot quietly replace the code you are
+# editing. One image serves all twelve: it contains a JDK and nothing else,
+# because the application arrives on a bind mount.
 #
 # Never used by the deploy. .github/workflows/deploy.yml runs plain
-# `docker compose` with no -f flags, and it only scps docker-compose.yml to the
+# `docker compose` with no -f flags and only scps docker-compose.yml to the
 # host, so this file cannot reach production even by accident.
 #
-# Use it through ./dev, which passes both files in the right order:
-#
-#     ./dev up --build
-#
-# or by hand:
-#
-#     docker compose -f docker-compose.yml -f compose.dev.yml up -d --build
-#
-# Only `build.context` is set. The image NAME still comes from
-# docker-compose.yml, so a local build tags mthanuj/homecrew-<svc>:dev and
-# `docker images` does not sprout a parallel set of names. The Dockerfiles are
-# single-stage and start at `COPY target/*.jar`, so the jar has to exist before
-# the image can build - that is what ./dev build does, and why `docker compose
-# build` on its own is not enough.
+# Each service gets a debugger on its own port, 5005 upwards in the order
+# below. DevTools restarts happen inside the same JVM, so an attached debugger
+# survives them.
 
 services:
   service-discovery:
     build:
-      context: ../home-crew-service-discovery
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-service-discovery:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5005:5005"
+    healthcheck:
+      start_period: 240s
+      retries: 40
 
   config-server:
     build:
-      context: ../home-crew-config-server
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-config-server:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5006:5006"
+    healthcheck:
+      start_period: 240s
+      retries: 40
 
   api-gateway:
     build:
-      context: ../home-crew-api-gateway
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-api-gateway:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5007:5007"
 
   auth-service:
     build:
-      context: ../home-crew-auth-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-auth-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5008:5008"
 
   user-service:
     build:
-      context: ../home-crew-user-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-user-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5009"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5009:5009"
 
   admin-service:
     build:
-      context: ../home-crew-admin-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-admin-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5010:5010"
 
   booking-service:
     build:
-      context: ../home-crew-booking-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-booking-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5011:5011"
 
   worker-service:
     build:
-      context: ../home-crew-worker-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-worker-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5012"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5012:5012"
 
   notification-service:
     build:
-      context: ../home-crew-notification-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-notification-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5013:5013"
 
   payment-service:
     build:
-      context: ../home-crew-payment-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-payment-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5014"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5014:5014"
 
   xp-service:
     build:
-      context: ../home-crew-xp-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-xp-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5015"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5015:5015"
 
   assignment-service:
     build:
-      context: ../home-crew-assignment-service
+      context: .
+      dockerfile: Dockerfile.dev
+    image: homecrew-dev-runtime:jdk25
     pull_policy: never
+    entrypoint: ["/bin/sh", "/dev-reload.sh"]
+    working_dir: /app
+    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    volumes:
+      - ../home-crew-assignment-service:/app
+      - ${HOME}/.m2:/root/.m2
+      - ./dev-reload.sh:/dev-reload.sh:ro
+    environment:
+      # Emptied, not tuned. The production value is -Xmx128m and
+      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
+      # cap Maven at 128m too and make the compile loop crawl.
+      JAVA_TOOL_OPTIONS: ""
+      MAVEN_OPTS: "-Xmx256m"
+      # Only the forked application JVM gets the debug agent. In
+      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
+      # this port as well, every two seconds.
+      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5016"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+    ports:
+      - "5016:5016"
