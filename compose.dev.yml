@@ -1,0 +1,70 @@
+# Dev override. Builds each service from your local checkout instead of
+# pulling mthanuj/homecrew-*:dev from Docker Hub.
+#
+# Never used by the deploy. .github/workflows/deploy.yml runs plain
+# `docker compose` with no -f flags, and it only scps docker-compose.yml to the
+# host, so this file cannot reach production even by accident.
+#
+# Use it through ./dev, which passes both files in the right order:
+#
+#     ./dev up --build
+#
+# or by hand:
+#
+#     docker compose -f docker-compose.yml -f compose.dev.yml up -d --build
+#
+# Only `build.context` is set. The image NAME still comes from
+# docker-compose.yml, so a local build tags mthanuj/homecrew-<svc>:dev and
+# `docker images` does not sprout a parallel set of names. The Dockerfiles are
+# single-stage and start at `COPY target/*.jar`, so the jar has to exist before
+# the image can build - that is what ./dev build does, and why `docker compose
+# build` on its own is not enough.
+
+services:
+  service-discovery:
+    build:
+      context: ../home-crew-service-discovery
+
+  config-server:
+    build:
+      context: ../home-crew-config-server
+
+  api-gateway:
+    build:
+      context: ../home-crew-api-gateway
+
+  auth-service:
+    build:
+      context: ../home-crew-auth-service
+
+  user-service:
+    build:
+      context: ../home-crew-user-service
+
+  admin-service:
+    build:
+      context: ../home-crew-admin-service
+
+  booking-service:
+    build:
+      context: ../home-crew-booking-service
+
+  worker-service:
+    build:
+      context: ../home-crew-worker-service
+
+  notification-service:
+    build:
+      context: ../home-crew-notification-service
+
+  payment-service:
+    build:
+      context: ../home-crew-payment-service
+
+  xp-service:
+    build:
+      context: ../home-crew-xp-service
+
+  assignment-service:
+    build:
+      context: ../home-crew-assignment-service

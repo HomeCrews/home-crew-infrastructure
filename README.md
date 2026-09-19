@@ -20,6 +20,47 @@ code; it is what runs the other fourteen.
 ## Running the stack
 
     cp .env.example .env
+    ./dev up
+
+`./dev` wraps the compose invocations for the cases that come up daily. It
+needs nothing but this repository unless you ask it to build from source.
+
+| Command | What it does |
+|---|---|
+| `./dev infra` | postgres, service-discovery, config-server only |
+| `./dev up` | the whole stack, from the published `:dev` images |
+| `./dev up --build` | the whole stack, from your local checkouts |
+| `./dev build [svc...]` | package and image a service without starting it |
+| `./dev down` | stop everything, keep the volumes |
+| `./dev reset` | stop everything and delete the volumes |
+| `./dev ps` / `logs` / `status` | inspect what is running |
+
+The inner loop is `./dev infra`, then run the one service you are editing from
+its own repository on the **default** profile:
+
+    ./dev infra
+    cd ../home-crew-user-service && ./mvnw spring-boot:run
+
+config-server (8888), Eureka (8761) and Postgres (5432) are all published to
+localhost, which is exactly what the default profile in
+[home-crew-config](https://github.com/HomeCrews/home-crew-config) points at. Do
+not set `SPRING_PROFILES_ACTIVE=docker` for a service run this way - the docker
+profile points at compose hostnames, which do not resolve from your machine.
+
+`./dev infra` deliberately leaves **kafka** out: no service has `spring-kafka`
+on its classpath yet, so the broker costs 512m and a 40s start period and
+nothing consumes it. Add it with `./dev infra kafka` when that changes - and
+note that `KAFKA_ADVERTISED_LISTENERS` is `kafka:9092`, so a client on the host
+is told to connect to a name only containers can resolve. Fixing that properly
+means a second listener advertised as `localhost`, which touches both this file
+and `application-docker.yml` in home-crew-config.
+
+`./dev up --build` compiles first, because the Dockerfiles are single-stage and
+begin at `COPY target/*.jar` - `docker compose build` alone would match nothing.
+It expects the sibling repositories at `../home-crew-<service>`.
+
+The raw commands still work, and are what the deploy uses:
+
     docker compose up -d
     docker compose ps
 
