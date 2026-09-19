@@ -1,0 +1,27 @@
+dev-reload.sh
+  s_8f1ee334861e7f::t_9dc8c8bbb019d3 47-83
+  s_8f1ee334861e7f::t_d72378cc96948f 8,10-12,14,17
+  s_8f1ee334861e7f::t_530af32df4be38 135,137,162,182
+Dockerfile.dev
+  s_8f1ee334861e7f::t_d41ef454b84973 25-60
+README.md
+  s_8f1ee334861e7f::t_d77bd373f9e840 138-142
+  s_8f1ee334861e7f::t_46535cecdf4561 54-55,63-95
+  s_8f1ee334861e7f::t_c33ec0088d2927 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0750c4e9eb1309f6b7a2900ef636d9c02e67bf90",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
