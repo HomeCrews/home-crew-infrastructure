@@ -1,0 +1,23 @@
+README.md
+  s_8f1ee334861e7f::t_32674ab2a8265f 108-127
+.env.example
+  s_8f1ee334861e7f::t_cb4410b75c2457 37-52
+compose.dev.yml
+  s_8f1ee334861e7f::t_ab4bfa05334468 48-52,84-88,120-124,153-157,186-190,219-223,252-256,285-289,318-322,351-355,384-388,417-421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4acab0781cec222895af9b2b0c48f1f16d5fc0ae",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
