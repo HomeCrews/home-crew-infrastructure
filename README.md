@@ -46,30 +46,46 @@ for you: `docker compose down -v`.
 
 ## Hot reload
 
-Save a `.java` file. That service restarts in a couple of seconds; nothing else
-is touched, and no image is rebuilt.
+Save a file. That service picks the change up; nothing else is touched, and no
+image is rebuilt.
 
-What makes it work is that **no container holds a copy of your code**.
+| You change | What happens | Roughly |
+|---|---|---|
+| anything under `src/main` - `.java`, `application.properties`, any resource | `mvn compile`, then DevTools restarts the context in-process | 2-5s |
+| `pom.xml` or `.mvn/**` | `mvn compile`, then the application process is stopped and relaunched | 20-40s |
+| anything under `src/test` | nothing, deliberately - a test edit should not bounce the running service | - |
+
+A dependency change is the one case that cannot be hot-reloaded:
+`spring-boot:run` fixed its classpath when it launched, so the process has to
+go. `dev-reload.sh` owns the application as a child process rather than
+`exec`ing it, which is what makes that restart possible.
+
+What makes the rest work is that **no container holds a copy of your code**.
 `compose.dev.yml` puts every service on `Dockerfile.dev` - a bare JDK, no
 application - and bind-mounts its checkout at `/app`. `dev-reload.sh` then runs
 two things inside each container:
 
-1. a loop that recompiles when a `.java` file changes, and
+1. a loop that polls the checkout and compiles, and
 2. `mvnw spring-boot:run`, whose DevTools restarts the context when
    `target/classes` changes underneath it.
 
+Resources ride the same path as source, because `mvn compile` runs
+`process-resources` - so an edited `application.properties` is copied into
+`target/classes` and DevTools treats it like any other classpath change. It is
+a genuine context restart, which is what a property change needs in order to
+take effect.
+
 So the compile happens inside the container, on the same files your editor is
-writing. The image is built once and never again during the loop; you would only
-rebuild it after changing a dependency in `pom.xml`, and `./dev up` always
-passes `--build` so even that is handled.
+writing. The image is built once and never again during the loop; `./dev up`
+always passes `--build`, so a change to `Dockerfile.dev` is picked up too.
 
 **Both halves poll rather than using inotify, and that is not laziness.** Docker
 Desktop's bind mounts on macOS and Windows do not propagate inotify events from
 the host, so `inotifywait` and anything built on Java's `WatchService` never
 fire - they do not error, they simply see nothing, which is the worst way for a
-watcher to fail. `find -newer` against a stamp file costs one stat per source
-file every two seconds and works everywhere. Spring Boot DevTools has always
-polled, which is why the second half works at all.
+watcher to fail. `find -newer` against a stamp file costs one stat per file
+every two seconds and works everywhere. Spring Boot DevTools has always polled,
+which is why the second half works at all.
 
 `spring-boot-devtools` is in all twelve poms as `<optional>true</optional>`. It
 is inert in production regardless: DevTools disables itself when it detects it
@@ -103,7 +119,12 @@ nowhere near enough.
   other ten would never start.
 - **A compile error does not take a service down.** `target/classes` keeps the
   last set that compiled, DevTools sees no change, and the running context is
-  untouched. You get an error in `./dev logs`, not an outage.
+  untouched. You get an error in `./dev logs`, not an outage. The same is true
+  of a `pom.xml` that does not resolve: the restart is skipped rather than
+  killing a working application to start a broken one.
+- **If the application dies anyway** - a context that fails to refresh, an OOM,
+  a port clash - the container stays up and says so. Fix the code and save; the
+  loop builds and starts it again. You should not need `docker restart`.
 - **Debuggers are on 5005 upwards**, in the order services are listed in
   `compose.dev.yml`. DevTools restarts happen inside the same JVM, so an
   attached debugger survives them.
