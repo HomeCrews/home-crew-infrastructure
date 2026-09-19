@@ -44,6 +44,20 @@ log() {
     printf '[dev-reload] %s\n' "$1"
 }
 
+# The shared pom-plugins.xml runs `git config core.hooksPath .githooks` at the
+# validate phase, on the stated assumption that "git necessarily is on PATH if
+# you are building from a clone". True on a laptop, false in this container -
+# and the plugin's tolerance of exit 128 does not save it, because git is not
+# found at all, so exec-maven-plugin throws rather than returning a code:
+#
+#     Cannot run program "git" (in directory "/app"): No such file or directory
+#
+# Skipped rather than made to work: those hooks belong to the HOST's clone, and
+# .git is on the bind mount, so a container installing them would be reaching
+# out and reconfiguring your repository behind your back. Dockerfile.dev also
+# installs git, so nothing else that expects it breaks.
+MVN_FLAGS="-Dhooks.install.skip=true"
+
 # mvnd flags, explained once because two of them are load-bearing:
 #
 #   daemonStorage  defaults to ~/.m2/mvnd, and ~/.m2 is bind-mounted and SHARED
@@ -75,9 +89,9 @@ fi
 run_compile() {
     if [ "$COMPILE" = mvnd ]; then
         # shellcheck disable=SC2086
-        mvnd $MVND_FLAGS --batch-mode -q compile
+        mvnd $MVND_FLAGS $MVN_FLAGS --batch-mode -q compile
     else
-        ./mvnw --batch-mode -q compile
+        ./mvnw $MVN_FLAGS --batch-mode -q compile
     fi
 }
 
@@ -88,7 +102,8 @@ start_app() {
     set --
     [ -n "${DEV_JVM_ARGS:-}" ] && set -- "-Dspring-boot.run.jvmArguments=$DEV_JVM_ARGS"
 
-    ./mvnw --batch-mode spring-boot:run "$@" &
+    # shellcheck disable=SC2086
+    ./mvnw $MVN_FLAGS --batch-mode spring-boot:run "$@" &
     APP_PID=$!
     log "application started (pid $APP_PID)"
 }
