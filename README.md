@@ -51,14 +51,48 @@ image is rebuilt.
 
 | You change | What happens | Roughly |
 |---|---|---|
-| anything under `src/main` - `.java`, `application.properties`, any resource | `mvn compile`, then DevTools restarts the context in-process | 2-5s |
-| `pom.xml` or `.mvn/**` | `mvn compile`, then the application process is stopped and relaunched | 20-40s |
+| anything under `src/main` - `.java`, `application.properties`, any resource | compile, then DevTools restarts the context in-process | 3-5s |
+| `pom.xml` or `.mvn/**` | compile, then the application process is stopped and relaunched | 30-60s |
 | anything under `src/test` | nothing, deliberately - a test edit should not bounce the running service | - |
 
 A dependency change is the one case that cannot be hot-reloaded:
 `spring-boot:run` fixed its classpath when it launched, so the process has to
 go. `dev-reload.sh` owns the application as a child process rather than
 `exec`ing it, which is what makes that restart possible.
+
+### Why mvnd
+
+That 3-5s assumes **mvnd**, the Maven Daemon, which `Dockerfile.dev` installs.
+Without it the same edit costs **8-15s**, and the extra ten seconds are not
+compilation - a cold `mvn` spends most of its time booting a JVM and re-checking
+the dependency tree for a module with three source files. mvnd keeps that JVM
+warm between invocations.
+
+It is used for the compile loop only. `spring-boot:run` always goes through
+`./mvnw`: mvnd is built for build goals that finish, and parking a process that
+runs until you stop the container on one of its daemons is not what it is for.
+
+The install is deliberately **not fatal**. mvnd's release asset naming has moved
+around between versions, so if the download fails the image still builds and
+`dev-reload.sh` falls back to `./mvnw`. It logs which one it picked on the first
+line, so check there if the loop feels slow:
+
+    ./dev logs user-service | grep 'compiling with'
+
+Three mvnd flags are load-bearing, all set in `dev-reload.sh`:
+`mvnd.daemonStorage` is moved to `/tmp` because it defaults to `~/.m2/mvnd` and
+`~/.m2` is shared by all twelve containers - they would otherwise share one
+daemon registry and try to reach sockets that do not exist in their own
+namespace. `mvnd.idleTimeout=15m` lets the ten services you are not editing drop
+their daemon instead of each holding a JVM for the default three hours. And
+`mvnd.jvmArgs` caps it, because the daemon is a third persistent JVM in a 1g
+container.
+
+**The fastest option is still your IDE.** If IntelliJ compiles on save, the
+container's compile step disappears from the critical path entirely and you are
+left with just DevTools' poll and the context restart - around 3s, with no mvnd
+involved. The catch is the one in "Things worth knowing" below: two compilers
+writing one `target/classes`.
 
 What makes the rest work is that **no container holds a copy of your code**.
 `compose.dev.yml` puts every service on `Dockerfile.dev` - a bare JDK, no
@@ -101,9 +135,11 @@ Docker Desktop's settings or lower the ceiling in `.env`:
 
     DEV_SERVICE_MEM=768m
 
-Each container is running three JVMs - Maven, the forked application, and
-another Maven on every compile - which is why the production figure of 192m is
-nowhere near enough.
+Each container is running three JVMs - the Maven that launched the application,
+the forked application itself, and an mvnd daemon once it has compiled at least
+once - which is why the production figure of 192m is nowhere near enough. The
+daemon is capped at `-Xmx320m` and times out after 15 minutes idle, so services
+you are not editing settle back down to two.
 
 ### Tuning the watcher
 
