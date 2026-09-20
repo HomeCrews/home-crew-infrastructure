@@ -1,0 +1,25 @@
+.env.example
+  s_8f1ee334861e7f::t_bac774612202cd 66-78
+.github/workflows/deploy.yml
+  s_8f1ee334861e7f::t_1646caff9e8895 158-168
+dev
+  s_8f1ee334861e7f::t_d66f733e32b969 120
+docker-compose.yml
+  s_8f1ee334861e7f::t_023c074a40b25a 2-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2f5b76e93c5676e363dcca782b754b1ce043fd5a",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
