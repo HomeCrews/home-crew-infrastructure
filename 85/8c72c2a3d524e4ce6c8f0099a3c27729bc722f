@@ -1,0 +1,32 @@
+dev
+  s_8f1ee334861e7f::t_4c44a2c15e55ed 30,72-77,116
+.env.example
+  s_8f1ee334861e7f::t_00bb5b23b6b4f4 53-65
+docker-compose.yml
+  s_8f1ee334861e7f::t_a6c21f3b93b687 483-513
+.github/workflows/deploy.yml
+  s_8f1ee334861e7f::t_a6c21f3b93b687 38
+README.md
+  s_8f1ee334861e7f::t_00bb5b23b6b4f4 136-137,334
+  s_8f1ee334861e7f::t_b703fcd85b4c2a 38-43,225
+compose.dev.yml
+  s_8f1ee334861e7f::t_9d13e5eee207e4 424-446
+webapp-dev.sh
+  s_8f1ee334861e7f::t_9d13e5eee207e4 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "858c72c2a3d524e4ce6c8f0099a3c27729bc722f",
+  "prompts": {},
+  "sessions": {
+    "s_8f1ee334861e7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b36985b-ae1d-4fa4-a365-e2432c2c80b9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
