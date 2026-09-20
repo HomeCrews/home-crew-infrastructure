@@ -1,0 +1,19 @@
+docker-compose.yml
+  s_7d2d84d760d8c4::t_d44bae82652575 1-17,24-29,38,41-48,50,52-53,55-57,195,231,281,303,327,351,377,403,429,453,479,505,536
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5cad330a679da70f9ccb9b3d76a472f2f86454b3",
+  "prompts": {},
+  "sessions": {
+    "s_7d2d84d760d8c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cc863e8-cf29-4700-bf96-2866f5acdbd2",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
