@@ -1,0 +1,26 @@
+.gitattributes
+  s_7d2d84d760d8c4::t_01e52df87d2ae1 1-7
+dev.ps1
+  s_7d2d84d760d8c4::t_5bfb3318159c1c 1-38,49-143,145-149,151,156-229
+  s_7d2d84d760d8c4::t_1f4b34942f8e4e 39-48,144,150,152-155
+postgres/init/01-create-databases.sql
+  s_7d2d84d760d8c4::t_2c41f2b8d79087 8-9
+README.md
+  s_7d2d84d760d8c4::t_d3c4a81fa39ffa 33-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b74eb5aa93b3045b36268448e083dccb6e7697b5",
+  "prompts": {},
+  "sessions": {
+    "s_7d2d84d760d8c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cc863e8-cf29-4700-bf96-2866f5acdbd2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
