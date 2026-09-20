@@ -26,6 +26,13 @@ x-spring-environment: &spring-environment
   DB_USERNAME: ${POSTGRES_USER:-homecrew}
   DB_PASSWORD: ${POSTGRES_PASSWORD:-homecrew}
 
+  # config-server requires HTTP basic now that it decrypts {cipher} values.
+  # Every client sends these; config-server itself gets the matching
+  # spring.security.user.* below. Same ${VAR:-default} shape as DB_USERNAME:
+  # the local default is public and only unlocks a local config-server.
+  CONFIG_CLIENT_USERNAME: ${CONFIG_CLIENT_USERNAME:-configclient}
+  CONFIG_CLIENT_PASSWORD: ${CONFIG_CLIENT_PASSWORD:-localdev}
+
   JAVA_TOOL_OPTIONS: "-Xms32m -Xmx128m -XX:+UseSerialGC"
 
 x-common-service: &common-service
@@ -209,6 +216,15 @@ services:
       # registered" - which reads like a broken dependency, not a missing token.
       CONFIG_GIT_USERNAME: ${CONFIG_GIT_USERNAME?unset - home-crew-config is private; set it in /opt/homecrew/.env}
       CONFIG_GIT_TOKEN: ${CONFIG_GIT_TOKEN?unset - home-crew-config is private; set it in /opt/homecrew/.env}
+
+      # ${VAR?...} like the git credentials above, not ${VAR:-}. There is no
+      # sane fallback for an encryption key: a default would mean every
+      # {cipher} value in home-crew-config decrypts to garbage, and the
+      # services would start with nonsense credentials rather than not start.
+      ENCRYPT_KEY: ${ENCRYPT_KEY?unset - config-server cannot decrypt {cipher} values without it; set it in /opt/homecrew/.env}
+      # The password clients present. Defaulted to match the anchor above so a
+      # local stack works from .env.example alone.
+      CONFIG_CLIENT_PASSWORD: ${CONFIG_CLIENT_PASSWORD:-localdev}
 
     depends_on:
       service-discovery:

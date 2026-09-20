@@ -289,6 +289,11 @@ rest are on the `dev` environment, which the job declares:
     CONFIG_GIT_USERNAME    CONFIG_GIT_TOKEN    (required - the config
                                                 repository is private)
 
+    ENCRYPT_KEY              (required - config-server decrypts the {cipher}
+                              values in home-crew-config before serving them)
+    CONFIG_CLIENT_PASSWORD   (required - 8888 now needs HTTP basic, and every
+                              service presents this)
+
 Adding a thirteenth service means three edits here: a compose service, an
 entry in the deploy allow-list, and a database in the init script if it needs
 one.

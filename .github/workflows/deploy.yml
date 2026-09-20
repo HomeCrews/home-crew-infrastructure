@@ -82,6 +82,8 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           CONFIG_GIT_USERNAME: ${{ secrets.CONFIG_GIT_USERNAME }}
           CONFIG_GIT_TOKEN: ${{ secrets.CONFIG_GIT_TOKEN }}
+          ENCRYPT_KEY: ${{ secrets.ENCRYPT_KEY }}
+          CONFIG_CLIENT_PASSWORD: ${{ secrets.CONFIG_CLIENT_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -105,7 +107,8 @@ jobs:
           # only place that can name the secret you need to go and set.
           missing=""
           for name in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
-                      CONFIG_GIT_USERNAME CONFIG_GIT_TOKEN; do
+                      CONFIG_GIT_USERNAME CONFIG_GIT_TOKEN \
+                      ENCRYPT_KEY CONFIG_CLIENT_PASSWORD; do
             [ -n "${!name-}" ] || missing="$missing $name"
           done
 
@@ -145,11 +148,13 @@ jobs:
           # atomic - a `docker compose up` racing this step reads either the old
           # file or the new one, never a truncated one.
           {
-            printf 'POSTGRES_USER=%s\n'       "$POSTGRES_USER"
-            printf 'POSTGRES_PASSWORD=%s\n'   "$POSTGRES_PASSWORD"
-            printf 'POSTGRES_DB=%s\n'         "$POSTGRES_DB"
-            printf 'CONFIG_GIT_USERNAME=%s\n' "$CONFIG_GIT_USERNAME"
-            printf 'CONFIG_GIT_TOKEN=%s\n'    "$CONFIG_GIT_TOKEN"
+            printf 'POSTGRES_USER=%s\n'          "$POSTGRES_USER"
+            printf 'POSTGRES_PASSWORD=%s\n'      "$POSTGRES_PASSWORD"
+            printf 'POSTGRES_DB=%s\n'            "$POSTGRES_DB"
+            printf 'CONFIG_GIT_USERNAME=%s\n'    "$CONFIG_GIT_USERNAME"
+            printf 'CONFIG_GIT_TOKEN=%s\n'       "$CONFIG_GIT_TOKEN"
+            printf 'ENCRYPT_KEY=%s\n'            "$ENCRYPT_KEY"
+            printf 'CONFIG_CLIENT_PASSWORD=%s\n' "$CONFIG_CLIENT_PASSWORD"
           } | ssh \
             -i ~/.ssh/homecrew \
             "$HETZNER_USER@$HETZNER_HOST" \
