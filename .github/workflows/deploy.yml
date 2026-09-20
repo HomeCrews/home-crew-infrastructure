@@ -277,13 +277,38 @@ jobs:
             "$HETZNER_USER@$HETZNER_HOST" \
             "docker login -u '$DOCKERHUB_USERNAME' --password-stdin"
 
+          # `up -d` with NO service argument, deliberately.
+          #
+          # `up -d '$SERVICE'` starts the dispatched service's dependencies
+          # but does NOT recreate ones already running - which is why
+          # --always-recreate-deps exists as an opt-in flag. The consequence
+          # was that a compose change to any service other than the dispatched
+          # one landed on disk via the scp above and then sat there forever.
+          #
+          # The kafka healthcheck fix was pushed and never took effect for
+          # exactly this reason: every deploy kept starting services against a
+          # kafka container created BEFORE the fix, still carrying the old 384m
+          # limit and 5s probe timeout, and reported
+          #     dependency failed to start: container homecrew-kafka is unhealthy
+          #
+          # A bare `up -d` converges: compose recreates only what actually
+          # changed, so an ordinary deploy still just restarts the dispatched
+          # service, while an infrastructure change finally self-applies.
+          #
+          # Trade-off, stated plainly: a deploy CAN now restart postgres or
+          # kafka as a side effect, when their definition changed. That is a
+          # brief interruption, and it is the price of compose edits being
+          # applied rather than silently ignored.
+          #
+          # `pull` stays scoped to '$SERVICE': only the dispatched service has
+          # a new image. Everything else keeps the image it already has.
           ssh \
             -i ~/.ssh/homecrew \
             "$HETZNER_USER@$HETZNER_HOST" \
             "cd /opt/homecrew && \
              docker compose config --quiet && \
              docker compose pull '$SERVICE' && \
-             docker compose up -d '$SERVICE'"
+             docker compose up -d"
 
       - name: Verify deployment
         env:
