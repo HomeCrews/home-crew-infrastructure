@@ -1,22 +1,13 @@
-# `dev` has no extension, so *.sh does not match it and `* text=auto` would let
-# core.autocrlf rewrite it to CRLF on a Windows checkout - after which WSL or Git
-# Bash fails with "bad interpreter: /bin/sh^M". Windows users should run dev.ps1
-# instead, but a WSL user shares this checkout. Outside the standards markers on
-# purpose: apply.py regenerates only what is between them.
 /dev text eol=lf
 
-# homecrew:standards:gitattributes:start
-# Git hooks MUST be checked out with LF endings. On Windows, core.autocrlf
-# would otherwise write CRLF, and the shell fails to parse the shebang with
-# "bad interpreter: /bin/sh^M" - which reads as the hook being missing rather
-# than mangled. This single rule is what makes the hooks work on Windows.
-.githooks/** text eol=lf
 *.sh        text eol=lf
 
-# Normalise text in the repo, let git decide what is binary.
-*           text=auto
+.editorconfig text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.md          text eol=lf
 
-# Windows batch files genuinely need CRLF.
-*.cmd       text eol=crlf
-*.bat       text eol=crlf
-# homecrew:standards:gitattributes:end
+* text=auto
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
