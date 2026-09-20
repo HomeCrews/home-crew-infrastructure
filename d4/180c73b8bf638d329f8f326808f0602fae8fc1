@@ -1,0 +1,19 @@
+.github/workflows/deploy.yml
+  s_7d2d84d760d8c4::t_1f8f6c6d316e82 280-304,311
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d4180c73b8bf638d329f8f326808f0602fae8fc1",
+  "prompts": {},
+  "sessions": {
+    "s_7d2d84d760d8c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cc863e8-cf29-4700-bf96-2866f5acdbd2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
