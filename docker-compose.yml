@@ -166,8 +166,25 @@ services:
       # when the deploy happened to sample it - a deploy that fails only
       # sometimes, on an unchanged commit.
       #
-      # 30s interval rather than 10s: a probe that can take 20s must not be
-      # able to overlap the next one.
+      # 30s interval rather than 10s, but NOT for the reason first written here.
+      # Docker runs a container's healthchecks sequentially - the next probe
+      # starts `interval` after the previous one FINISHES - so two probes can
+      # never overlap and the original rationale was simply wrong. The real
+      # reason stands: at 10s this container span a fresh JVM roughly every 15s
+      # inside a memory-capped cgroup, and that churn is what starved the broker.
+      # At 30s it is about every 35s.
+      #
+      # start_interval applies ONLY during start_period, and it is what stops
+      # `interval` from also being a floor on how fast this can go healthy. With
+      # interval alone the first probe lands at 30s, so kafka could not report
+      # healthy sooner even when the broker was up at 18s - and service-discovery,
+      # config-server and all ten clients queue behind it, so that floor was
+      # costing the whole deploy.
+      #
+      # Needs Docker Engine >= 25.0 and Compose >= 2.20. If the host is older,
+      # `docker compose config` rejects the key outright and every deploy fails
+      # at its validation gate - so verify before relying on it.
+      start_interval: 5s
       test:
         [
           "CMD-SHELL",
