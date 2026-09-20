@@ -117,7 +117,7 @@ rebuilt and no other service is touched.
     gateway          http://localhost:8080
     eureka           http://localhost:8761
     config-server    http://localhost:8888/actuator/health
-    served config    http://localhost:8888/userservice/docker
+    served config    http://localhost:8888/userservice/container
 
 Debuggers are on 5005 upwards, in the order the services are listed in
 compose.dev.yml. Attached debuggers survive a DevTools restart.

@@ -155,6 +155,17 @@ jobs:
             printf 'CONFIG_GIT_TOKEN=%s\n'       "$CONFIG_GIT_TOKEN"
             printf 'ENCRYPT_KEY=%s\n'            "$ENCRYPT_KEY"
             printf 'CONFIG_CLIENT_PASSWORD=%s\n' "$CONFIG_CLIENT_PASSWORD"
+            # THIS LINE IS WHAT MAKES THE DEPLOYED ENVIRONMENT DIFFERENT.
+            #
+            # docker-compose.yml defaults to `container` - the compose topology,
+            # which a laptop also uses. Here we layer `deploy` on top, and that
+            # is the only profile carrying '{cipher}' secrets. Because nothing
+            # local activates it, a developer's config-server never needs the
+            # production ENCRYPT_KEY.
+            #
+            # Not a GitHub secret: it is neither secret nor environment-specific
+            # beyond this one file, and a literal is one less thing to forget.
+            printf 'SPRING_PROFILES_ACTIVE=%s\n' "container,deploy"
           } | ssh \
             -i ~/.ssh/homecrew \
             "$HETZNER_USER@$HETZNER_HOST" \

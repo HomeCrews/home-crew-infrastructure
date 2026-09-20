@@ -1,5 +1,13 @@
 x-spring-environment: &spring-environment
-  SPRING_PROFILES_ACTIVE: docker
+  # container = compose topology (service names instead of localhost). Active
+  # here AND on Hetzner, which is why it is named for the topology rather than
+  # an environment.
+  #
+  # Overridable so the deployed host can layer on top: deploy.yml writes
+  # SPRING_PROFILES_ACTIVE=container,deploy into /opt/homecrew/.env, adding the
+  # `deploy` profile that carries the encrypted secrets. Nothing local sets it,
+  # so a laptop's config-server never needs the production ENCRYPT_KEY.
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-container}
 
   # Resolves ${CONFIG_SERVER_URI:...} in each service's single
   # spring.config.import line. Services declare one import, not one per
