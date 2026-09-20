@@ -5,3 +5,5 @@ CREATE DATABASE homecrew_booking;
 CREATE DATABASE homecrew_worker;
 CREATE DATABASE homecrew_payment;
 CREATE DATABASE homecrew_xp;
+CREATE DATABASE homecrew_assignment;
+CREATE DATABASE homecrew_notification;

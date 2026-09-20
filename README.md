@@ -30,6 +30,16 @@ Three commands, and that is the whole interface:
 | `./dev down` | stop everything, keeping the volumes |
 | `./dev logs [svc...]` | follow logs |
 
+On Windows use `dev.ps1`, which mirrors `dev` exactly - same commands, same
+guards, same messages: `.\dev.ps1 up`, `.\dev.ps1 down`, `.\dev.ps1 logs`. From
+`cmd.exe` rather than PowerShell, `powershell -ExecutionPolicy Bypass -File
+dev.ps1 up`. The two scripts are a pair; a change to one belongs in the other.
+
+It carries one guard `dev` does not need: `compose.dev.yml` mounts `${HOME}/.m2`
+into every container, and `HOME` is a POSIX variable that Windows does not set,
+so `dev.ps1` fills it from `USERPROFILE` before calling compose. Without that,
+Docker substitutes an empty string and tries to mount `/.m2`.
+
 **There is no non-watch mode.** Every service runs from its sibling checkout at
 `../home-crew-<service>`, compiled inside its own container. Your machine needs
 docker and a `.env`; it does **not** need a JDK or Maven, because the containers
