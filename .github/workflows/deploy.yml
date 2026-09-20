@@ -205,6 +205,56 @@ jobs:
 
           echo "Infrastructure configuration synced."
 
+      - name: Reclaim disk space
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+        run: |
+          set -euo pipefail
+
+          # BEFORE the pull, not after, for two reasons. A full disk is exactly
+          # what makes the pull fail, so the headroom is needed now rather than
+          # once the damage is done. And pruning here leaves the currently
+          # RUNNING image in place - it is still tagged and still in use - which
+          # is the only thing an immediate rollback has to work with.
+          #
+          # Every deploy re-pulls the moving :dev tag, and each pull orphans the
+          # previous image as an untagged <none>. Thirteen services at a few
+          # hundred MB each, times every deploy since the host was built, is
+          # where the disk went. Nothing reclaimed it until now.
+          #
+          # Piped over stdin as a quoted heredoc rather than passed as an ssh
+          # argument: no local expansion, no quoting to get wrong, and the
+          # script never appears in `ps` on the remote host.
+          ssh -i ~/.ssh/homecrew "$HETZNER_USER@$HETZNER_HOST" 'sh -s' <<'REMOTE'
+          set -eu
+
+          echo "--- before ---"
+          df -h / | tail -1
+          docker system df
+
+          # DANGLING ONLY. Deliberately not `-a`: that also deletes tagged
+          # images no container happens to be running, so any service that is
+          # stopped - or simply not yet started on a fresh host - would have to
+          # re-pull hundreds of MB on the next `up`.
+          #
+          # NEVER add --volumes to any of these. postgres_data and kafka_data
+          # live there, and `docker system prune --volumes` would take the
+          # databases with it.
+          docker image prune -f
+          docker container prune -f
+
+          echo "--- after ---"
+          df -h / | tail -1
+
+          used=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+          if [ "$used" -gt 90 ]; then
+            echo "WARNING: root filesystem is still ${used}% full after pruning." >&2
+            echo "         Dangling images were not the whole story - read the" >&2
+            echo "         'docker system df' above for volumes and build cache." >&2
+          fi
+          REMOTE
+
       - name: Deploy service
         env:
           HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
