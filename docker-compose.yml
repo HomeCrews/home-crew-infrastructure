@@ -239,7 +239,11 @@ services:
     image: mthanuj/homecrew-config-server:dev
     container_name: homecrew-config-server
 
-    mem_limit: 256m
+    # 320m, up from 256m. This container gained spring-boot-starter-security, the
+    # encryptor and RequiredSecrets, and JGit holds a clone of home-crew-config -
+    # all inside what was a 192m heap. GC pressure there shows up as a slow
+    # /actuator/health, which is the one thing that must stay fast.
+    mem_limit: 320m
 
     ports:
       - "8888:8888"
@@ -271,15 +275,32 @@ services:
         condition: service_healthy
 
     healthcheck:
+      # Unauthenticated on purpose, and the reason SecurityConfig permits exactly
+      # this path. Behind basic auth this curl is a 401, config-server never
+      # reports healthy, and all ten `depends_on: service_healthy` clients refuse
+      # to start - a total outage whose cause looks nothing like a security
+      # setting.
+      #
+      # TIMEOUT MUST EXCEED spring.cloud.config.server.git.timeout (10s).
+      # ConfigServerHealthIndicator resolves a real Environment, so before
+      # refresh-rate was raised this probe could trigger a git fetch - and a 3s
+      # curl timeout against an operation allowed 10s to connect meant the probe
+      # lost a race it was never able to win. Roughly one deploy in five flipped
+      # this container to unhealthy as a result.
+      #
+      # interval is the GAP between probes, not a cadence - Docker starts the next
+      # probe `interval` after the previous one finishes - so 15s + a 12s worst
+      # case is a ~27s cycle. start_interval keeps startup detection fast anyway.
       test:
         [
           "CMD-SHELL",
           "curl -fsS http://localhost:8888/actuator/health || exit 1",
         ]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 20s
+      start_interval: 3s
+      interval: 15s
+      timeout: 12s
+      retries: 6
+      start_period: 60s
 
     networks:
       - homecrew
