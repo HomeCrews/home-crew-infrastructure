@@ -35,7 +35,7 @@ jobs:
           echo "SHA:     $SHA"
 
           case "$SERVICE" in
-            user-service|auth-service|admin-service|booking-service|worker-service|notification-service|payment-service|xp-service|assignment-service|api-gateway|config-server|service-discovery)
+            user-service|auth-service|admin-service|booking-service|worker-service|notification-service|payment-service|xp-service|assignment-service|api-gateway|config-server|service-discovery|webapp)
               ;;
             *)
               echo "ERROR: Unsupported service: $SERVICE"

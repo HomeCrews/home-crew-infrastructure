@@ -480,6 +480,37 @@ services:
     networks:
       - homecrew
 
+  webapp:
+    <<: *common-service
+    image: mthanuj/homecrew-webapp:dev
+    container_name: homecrew-webapp
+
+    # nginx serving static files, not a JVM. 64m is generous for it.
+    mem_limit: 64m
+
+    # 4200:80 rather than 80:80. 4200 is what Angular's dev server uses, so the
+    # URL is the same whether you are running the built image or the dev
+    # container, and neither needs root to bind a privileged port.
+    ports:
+      - "4200:80"
+
+    # Deliberately NOT <<: *spring-environment. This is not a Spring
+    # application: it has no config-server client, no Eureka registration and
+    # no datasource. SPRING_CLOUD_CONFIG_FAIL_FAST would bind to nothing, and
+    # inheriting DB_PASSWORD would put a credential in a container that serves
+    # its whole filesystem to the browser.
+
+    # service_started, not service_healthy: api-gateway has no healthcheck, and
+    # the browser - not this container - is what calls the gateway, so nothing
+    # here breaks if the gateway is slow. This only expresses intent about
+    # startup order.
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+    networks:
+      - homecrew
+
 networks:
   homecrew:
     name: homecrew

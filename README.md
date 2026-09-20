@@ -35,6 +35,12 @@ Three commands, and that is the whole interface:
 docker and a `.env`; it does **not** need a JDK or Maven, because the containers
 do the compiling.
 
+That includes **webapp**, which is the odd one out: it is Angular, not a JVM,
+so it gets `node:24-alpine` and Angular's own dev server instead of
+`Dockerfile.dev` and the compile loop. Its `node_modules` lives in a named
+volume rather than on the bind mount, so the first `./dev up` after a
+`docker compose down -v` is slow while it installs.
+
 `.env` is gitignored and is **required**, not optional: `POSTGRES_PASSWORD` is
 declared `${VAR:?}` in the compose file, so `docker compose config` exits
 non-zero without one. That is deliberate - the deploy runs
@@ -127,8 +133,8 @@ is running from a fully packaged jar, which is how every deployed image starts.
 
 ### Memory
 
-Twelve watched services at `DEV_SERVICE_MEM` (1g by default) plus postgres and
-kafka is **13g of ceiling**. Those are limits rather than reservations, so real
+Twelve watched services at `DEV_SERVICE_MEM` (1g by default), webapp at
+`WEBAPP_DEV_MEM` (also 1g), plus postgres and kafka is **14g of ceiling**. Those are limits rather than reservations, so real
 usage is more like 400-700m per service, but Docker Desktop's VM defaults to
 roughly half your host RAM. On a 16g machine, either raise the VM to 12g in
 Docker Desktop's settings or lower the ceiling in `.env`:
@@ -216,6 +222,7 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
 | payment-service | 8087 | `mthanuj/homecrew-payment-service:dev` | + postgres, kafka |
 | xp-service | 8088 | `mthanuj/homecrew-xp-service:dev` | + postgres, kafka |
 | assignment-service | 8089 | `mthanuj/homecrew-assignment-service:dev` | + kafka |
+| webapp | 4200 | `mthanuj/homecrew-webapp:dev` | api-gateway (started) |
 
 Everything is on one user-defined bridge network named `homecrew`, and every
 service is memory-capped - the target is a small single host, so the JVMs run
@@ -324,7 +331,7 @@ HomeCrew is fifteen repositories. The ones you are most likely to need next:
 | [home-crew-payment-service](https://github.com/HomeCrews/home-crew-payment-service) | `/payments/**` | 8087 |
 | [home-crew-xp-service](https://github.com/HomeCrews/home-crew-xp-service) | `/xp/**` | 8088 |
 | [home-crew-assignment-service](https://github.com/HomeCrews/home-crew-assignment-service) | `/assignments/**` | 8089 |
-| [home-crew-webapp](https://github.com/HomeCrews/home-crew-webapp) | web frontend, not yet scaffolded | - |
+| [home-crew-webapp](https://github.com/HomeCrews/home-crew-webapp) | web frontend, Angular | 4200 |
 
 ## Licence
 

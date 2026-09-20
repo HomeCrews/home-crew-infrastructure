@@ -27,7 +27,7 @@ FILES="-f $ROOT/docker-compose.yml -f $ROOT/compose.dev.yml"
 
 SERVICES="service-discovery config-server api-gateway auth-service
 user-service admin-service booking-service worker-service
-notification-service payment-service xp-service assignment-service"
+notification-service payment-service xp-service assignment-service webapp"
 
 die() {
     printf '%s\n' "$@" >&2
@@ -69,7 +69,12 @@ require_docker() {
 require_siblings() {
     missing=""
     for svc in $SERVICES; do
-        [ -f "$SIBLINGS/home-crew-$svc/pom.xml" ] || missing="$missing home-crew-$svc"
+        # pom.xml for the twelve Java services, package.json for webapp -
+        # checking only for the directory would pass on an empty clone.
+        if [ ! -f "$SIBLINGS/home-crew-$svc/pom.xml" ] \
+           && [ ! -f "$SIBLINGS/home-crew-$svc/package.json" ]; then
+            missing="$missing home-crew-$svc"
+        fi
     done
     [ -z "$missing" ] || die \
         "These checkouts are missing or incomplete:$missing" \
@@ -108,6 +113,7 @@ After that, save a .java file. The log for that service shows "change
 detected, recompiling", then DevTools restarting the context. No image is
 rebuilt and no other service is touched.
 
+    webapp           http://localhost:4200
     gateway          http://localhost:8080
     eureka           http://localhost:8761
     config-server    http://localhost:8888/actuator/health

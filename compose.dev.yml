@@ -421,3 +421,26 @@ services:
       DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
     ports:
       - "5016:5016"
+
+  # The one service that is not a JVM. Angular's dev server does its own
+  # watching and rebuilding, so there is no compile loop to bolt on - see
+  # webapp-dev.sh. It gets node:24-alpine rather than Dockerfile.dev, which
+  # carries a JDK and Maven it has no use for.
+  webapp:
+    image: node:24-alpine
+    entrypoint: ["/bin/sh", "/webapp-dev.sh"]
+    working_dir: /app
+    mem_limit: ${WEBAPP_DEV_MEM:-1g}
+    volumes:
+      - ../home-crew-webapp:/app
+      # node_modules in a named volume, NOT on the bind mount. Installing onto
+      # the host directory would be slow over a macOS bind mount, would leave a
+      # platform-specific tree in your checkout, and would collide with any
+      # install you run outside the container.
+      - webapp_node_modules:/app/node_modules
+      - ./webapp-dev.sh:/webapp-dev.sh:ro
+    environment:
+      WEBAPP_POLL_INTERVAL: ${WEBAPP_POLL_INTERVAL:-2000}
+
+volumes:
+  webapp_node_modules:
