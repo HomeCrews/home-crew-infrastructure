@@ -56,7 +56,38 @@ log() {
 # .git is on the bind mount, so a container installing them would be reaching
 # out and reconfiguring your repository behind your back. Dockerfile.dev also
 # installs git, so nothing else that expects it breaks.
-MVN_FLAGS="-Dhooks.install.skip=true"
+#
+# Spotless and Checkstyle are skipped for a different reason, and only here.
+#
+# Both bind to the VALIDATE phase, which runs before compile - and
+# spring-boot:run forks its own lifecycle through test-compile, so it runs them
+# too. That puts the full formatting gate in front of every single save, and a
+# save is the wrong moment to ask "is this fit to commit". Code mid-thought is
+# routinely mid-format; three characters of trailing whitespace should not fail
+# the build at validate and leave the service not reloading until you go and run
+# `./mvnw spotless:apply` by hand.
+#
+# Spotless and the editor now share one formatter profile
+# (config/eclipse-formatter.xml), so they no longer disagree the way they did
+# when the build ran google-java-format and the editor ran Eclipse JDT. That
+# makes this skip less load-bearing than it was - but not pointless: the two
+# still resolve their own JDT builds, and an unfinished edit can be unformatted
+# for entirely ordinary reasons.
+#
+# Skipping them costs nothing, because the container is not what keeps the
+# repository formatted. Three other things already do, and all three run on the
+# HOST where spotless:apply is actually available to fix what they find:
+#
+#   pre-commit  .githooks/checks/formatting.sh  ->  spotless:check
+#   pre-push    .githooks/checks/build.sh       ->  clean verify
+#   CI          .github/workflows/ci.yml        ->  clean verify
+#
+# So unformatted code still cannot be committed, pushed or merged. It just no
+# longer takes your running service down while you are in the middle of writing
+# it. The inner loop answers "does this compile", and the gates answer "is this
+# fit to commit" - which is a question worth asking once per commit, not once
+# per keystroke.
+MVN_FLAGS="-Dhooks.install.skip=true -Dspotless.check.skip=true -Dcheckstyle.skip=true"
 
 # mvnd flags, explained once because two of them are load-bearing:
 #
@@ -149,9 +180,23 @@ touch "$SRC_STAMP" "$BUILD_STAMP"
 
 log "compiling with: $COMPILE"
 log "resolving dependencies and compiling once - the first run is the slow one"
-run_compile
 
-start_app
+# Guarded exactly like the two calls in the loop below, and for the same reason.
+# A bare `run_compile` here would be the only unguarded one in the script: under
+# `set -e` a failed first compile kills the script, the container exits
+# non-zero, and compose restarts it straight back into the same failure. A
+# watcher that restart-loops on a broken checkout is useless at exactly the
+# moment you need it, because the thing that would pick up your fix is the thing
+# that is not running.
+#
+# So do not start the application - but do not give up either. Fall through to
+# the loop: its src_changed branch calls start_app whenever a compile succeeds
+# and nothing is running, so the first save that builds brings the service up.
+if run_compile; then
+    start_app
+else
+    log "THE FIRST COMPILE FAILED - fix the code and save; this will retry" >&2
+fi
 
 while :; do
     sleep "$INTERVAL"

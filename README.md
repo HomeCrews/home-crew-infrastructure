@@ -193,7 +193,10 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   last set that compiled, DevTools sees no change, and the running context is
   untouched. You get an error in `./dev logs`, not an outage. The same is true
   of a `pom.xml` that does not resolve: the restart is skipped rather than
-  killing a working application to start a broken one.
+  killing a working application to start a broken one. This holds for the very
+  first compile too - a checkout that does not build leaves the container up and
+  waiting, rather than exiting and being restarted straight back into the same
+  failure.
 - **If the application dies anyway** - a context that fails to refresh, an OOM,
   a port clash - the container stays up and says so. Fix the code and save; the
   loop builds and starts it again. You should not need `docker restart`.
@@ -208,6 +211,19 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   than returning a code. Skipping it is right on its own terms too - those hooks
   belong to your clone, and `.git` is on the bind mount, so a container
   installing them would be reconfiguring your repository.
+- **Spotless and Checkstyle are skipped inside the container too.** Both bind to
+  the validate phase, and `spring-boot:run` forks its own lifecycle through
+  test-compile, so without `-Dspotless.check.skip=true -Dcheckstyle.skip=true`
+  the full formatting gate runs in front of every save. Three characters of
+  trailing whitespace were enough to fail the build at validate and leave the
+  service not reloading until you ran `./mvnw spotless:apply` by hand. The build
+  and the editor now share one formatter profile, so they no longer disagree the
+  way they did when Spotless ran google-java-format and editors ran Eclipse JDT
+  - but a save is still the wrong moment to ask *is this fit to commit*, because
+  code mid-thought is routinely mid-format. Nothing is lost by moving the gate:
+  the pre-commit hook, the pre-push `clean verify` and CI all still run it, on
+  the host, where `spotless:apply` is there to fix what they find. The inner loop
+  answers *does this compile*; the gates answer *is this fit to commit*.
 - **Do not run `./mvnw` in a service repository while the stack is up.** The
   container is compiling into that same `target/` over the mount.
 - **On Linux hosts**, the containers' Maven runs as root and will leave
