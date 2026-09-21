@@ -1,0 +1,35 @@
+dev-reload.sh
+  s_489a83bb3b7447::t_01c2d168a858eb 64-75
+  s_7d2d84d760d8c4::t_2ddd62af869093 184-199
+  s_7d2d84d760d8c4::t_7d9eaaeec0cf39 59-63,76-90
+README.md
+  s_7d2d84d760d8c4::t_a4ef596cd4a47a 214-216,224-226
+  s_7d2d84d760d8c4::t_cbb85a4c3440e4 196-199
+  s_489a83bb3b7447::t_4835e1670727de 217-223
+.gitattributes
+  s_489a83bb3b7447::t_564ee870c99f58 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e12ac8d0a8f44b5c0638996ed4ee8d3c5d17d9dd",
+  "prompts": {},
+  "sessions": {
+    "s_489a83bb3b7447": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c5e37635-0e20-466e-92b9-63976c59e8d5",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_7d2d84d760d8c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cc863e8-cf29-4700-bf96-2866f5acdbd2",
+        "model": "anthropic.claude-opus-5"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
