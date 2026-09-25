@@ -6,10 +6,10 @@
 # actually pick the change up:
 #
 #   src/main/**   (java, resources, anything)  ->  compile
-#                 DevTools sees target/classes change and restarts the context
-#                 in-process. This is the common case: roughly 3-5s with mvnd,
-#                 8-15s without, because a cold `mvn` spends most of its time
-#                 booting a JVM rather than compiling.
+#                 then touch the DevTools trigger file, which restarts the
+#                 context in-process. This is the common case: roughly 3-5s with
+#                 mvnd, 8-15s without, because a cold `mvn` spends most of its
+#                 time booting a JVM rather than compiling.
 #
 #   pom.xml, .mvn/**                           ->  compile + restart the app
 #                 A dependency change cannot be hot-reloaded: spring-boot:run
@@ -32,6 +32,16 @@ APP=/app
 SRC_STAMP=/tmp/dev-reload-src
 BUILD_STAMP=/tmp/dev-reload-build
 INTERVAL=${DEV_RELOAD_INTERVAL:-2}
+
+# The file DevTools restarts on, and nothing else. Without one, DevTools
+# restarts on any change it sees in target/classes, and it cannot tell a
+# finished compile from one still writing: resources are copied first, class
+# files land when javac is done, and a gap longer than its quiet period meant a
+# restart on half-new classes. With spring.devtools.restart.trigger-file set,
+# it ignores all of that until this file changes, and this script touches it
+# only after a compile that succeeded. The name comes from the variable compose
+# sets for the application, so the two cannot disagree about it.
+TRIGGER=$APP/target/classes/${SPRING_DEVTOOLS_RESTART_TRIGGER_FILE:-.reloadtrigger}
 
 APP_PID=""
 APP_STARTED=0
@@ -278,12 +288,15 @@ while :; do
         touch "$SRC_STAMP"
         log "source or resources changed - recompiling"
 
-        # A compile failure must not take the application down. target/classes
-        # is left holding the last set that did compile, DevTools sees no
-        # change, and the running context is untouched - so a typo costs you an
-        # error message, not an outage.
+        # A compile failure must not take the application down. The trigger is
+        # touched only on success, so whatever javac managed to write before it
+        # failed is never restarted onto, and the running context is untouched -
+        # so a typo costs you an error message, not an outage.
         if run_compile; then
             if [ -n "$APP_PID" ]; then
+                # After the compile has finished, never during it: this is the
+                # one change DevTools acts on.
+                touch "$TRIGGER"
                 log "recompiled - DevTools will restart the context"
             else
                 start_app_fresh
@@ -294,9 +307,7 @@ while :; do
     fi
 
     # Checked last, so a save in the same tick starts the new build instead of
-    # the old one being started and then immediately replaced. It starts
-    # whatever target/classes holds, which a failed compile leaves alone - see
-    # COMPILE FAILED above - so a broken edit cannot be what this launches.
+    # the old one being started and then immediately replaced.
     if [ -z "$APP_PID" ] && [ "$RESTART_AT" -gt 0 ] && [ "$(date +%s)" -ge "$RESTART_AT" ]; then
         RESTART_AT=0
         start_app

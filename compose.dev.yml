@@ -63,6 +63,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -101,6 +104,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -139,6 +145,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -174,6 +183,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -209,6 +221,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5009"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -244,6 +259,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -279,6 +297,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -314,6 +335,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5012"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -349,6 +373,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -384,6 +411,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5014"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -419,6 +449,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5015"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env
@@ -454,6 +487,9 @@ services:
       DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5016"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+      # Restart only when dev-reload.sh touches this file after a compile that
+      # succeeded, not on the class files javac writes along the way.
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
       # Passed through explicitly. .env drives compose SUBSTITUTION, not
       # container environment, so dev-reload.sh would never see it otherwise -
       # it would silently fall back to its own default and the knob in .env

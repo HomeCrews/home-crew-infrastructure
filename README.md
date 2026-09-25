@@ -122,14 +122,22 @@ application - and bind-mounts its checkout at `/app`. `dev-reload.sh` then runs
 two things inside each container:
 
 1. a loop that polls the checkout and compiles, and
-2. `mvnw spring-boot:run`, whose DevTools restarts the context when the
-   container's `target/classes` changes underneath it.
+2. `mvnw spring-boot:run`, whose DevTools restarts the context when the loop
+   touches `target/classes/.reloadtrigger` after a compile that succeeded.
+
+**DevTools restarts on the trigger file, not on class files.** Left to itself,
+DevTools restarts on any change in `target/classes`, and it cannot tell a
+finished compile from one still writing - resources are copied first and the
+class files land when javac is done, so a gap longer than its 1s quiet period
+could mean a restart on half-new classes, then a second when the rest arrived.
+`compose.dev.yml` sets `SPRING_DEVTOOLS_RESTART_TRIGGER_FILE`, so DevTools
+ignores all of that until the loop touches the trigger, which it does once per
+successful compile. One save, one restart, on a complete set of classes.
 
 Resources ride the same path as source, because `mvn compile` runs
 `process-resources` - so an edited `application.properties` is copied into
-`target/classes` and DevTools treats it like any other classpath change. It is
-a genuine context restart, which is what a property change needs in order to
-take effect.
+`target/classes` and picked up by the same restart. It is a genuine context
+restart, which is what a property change needs in order to take effect.
 
 So the compile happens inside the container, on the same files your editor is
 writing. The image is built once and never again during the loop; `./dev up`
@@ -195,9 +203,9 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   behind them by `depends_on: service_healthy`, and a cold Maven compile does
   not fit in the production budget - they would be marked unhealthy and the
   other ten would never start.
-- **A compile error does not take a service down.** `target/classes` keeps the
-  last set that compiled, DevTools sees no change, and the running context is
-  untouched. You get an error in `./dev logs`, not an outage. The same is true
+- **A compile error does not take a service down.** The trigger file is only
+  touched after a compile succeeds, so DevTools never restarts onto a failed
+  one, and the running context is untouched. You get an error in `./dev logs`, not an outage. The same is true
   of a `pom.xml` that does not resolve: the restart is skipped rather than
   killing a working application to start a broken one. This holds for the very
   first compile too - a checkout that does not build leaves the container up and
