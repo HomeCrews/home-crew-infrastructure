@@ -18,6 +18,22 @@
 # Each service gets a debugger on its own port, 5005 upwards in the order
 # below. DevTools restarts happen inside the same JVM, so an attached debugger
 # survives them.
+#
+# OWN target/ PER CONTAINER. Every service mounts a named volume over
+# /app/target, so the container compiles into a directory the host never sees.
+# Sharing the checkout's target/ meant two compilers writing one tree: the VS
+# Code Java extension builds into target/classes on the host, and DevTools in
+# the container restarts on any write it sees there. One save became two
+# restarts, racing each other over the same class files, and anything that makes
+# the IDE rebuild the workspace - opening it, a pull, a pom change - restarted
+# every service at once, config-server included, so the rest failed their config
+# fetch. A host `./mvnw clean verify`, which the pre-push hook runs, also deleted
+# the classes out from under the running application.
+#
+# The cost: an IDE compile-on-save no longer reaches the container, so
+# dev-reload.sh's own compile is the only way code gets in. The volumes are
+# caches - `docker compose down -v` empties them along with the databases, and
+# the next start compiles from cold.
 
 services:
   service-discovery:
@@ -31,6 +47,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-service-discovery:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - service_discovery_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -67,6 +85,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-config-server:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - config_server_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -103,6 +123,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-api-gateway:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - api_gateway_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -136,6 +158,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-auth-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - auth_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -169,6 +193,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-user-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - user_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -202,6 +228,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-admin-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - admin_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -235,6 +263,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-booking-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - booking_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -268,6 +298,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-worker-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - worker_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -301,6 +333,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-notification-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - notification_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -334,6 +368,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-payment-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - payment_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -367,6 +403,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-xp-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - xp_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -400,6 +438,8 @@ services:
     mem_limit: ${DEV_SERVICE_MEM:-1g}
     volumes:
       - ../home-crew-assignment-service:/app
+      # Container-local target/ - see OWN target/ PER CONTAINER above.
+      - assignment_service_target:/app/target
       - ${HOME}/.m2:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
     environment:
@@ -444,3 +484,15 @@ services:
 
 volumes:
   webapp_node_modules:
+  service_discovery_target:
+  config_server_target:
+  api_gateway_target:
+  auth_service_target:
+  user_service_target:
+  admin_service_target:
+  booking_service_target:
+  worker_service_target:
+  notification_service_target:
+  payment_service_target:
+  xp_service_target:
+  assignment_service_target:

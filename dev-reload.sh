@@ -34,6 +34,16 @@ BUILD_STAMP=/tmp/dev-reload-build
 INTERVAL=${DEV_RELOAD_INTERVAL:-2}
 
 APP_PID=""
+APP_STARTED=0
+
+# Automatic restarts after the application exits on its own - see the top of
+# the loop. MAX_RESTARTS attempts, backing off from RESTART_DELAY seconds and
+# doubling; a run that stays up for STABLE_SECS earns a fresh budget.
+MAX_RESTARTS=5
+RESTART_DELAY=5
+STABLE_SECS=120
+RESTARTS=0
+RESTART_AT=0
 
 cd "$APP"
 
@@ -136,7 +146,16 @@ start_app() {
     # shellcheck disable=SC2086
     ./mvnw $MVN_FLAGS --batch-mode spring-boot:run "$@" &
     APP_PID=$!
+    APP_STARTED=$(date +%s)
     log "application started (pid $APP_PID)"
+}
+
+# A start you asked for by saving. Whatever the automatic restarts had used up
+# belonged to the previous failure, not to this build.
+start_app_fresh() {
+    RESTARTS=0
+    RESTART_AT=0
+    start_app
 }
 
 stop_app() {
@@ -202,12 +221,35 @@ while :; do
     sleep "$INTERVAL"
 
     # The application can die on its own: a context that fails to refresh, an
-    # OOM, a port clash. Keep the CONTAINER up when that happens, so that a
-    # fix-and-save brings it back instead of needing a docker restart.
+    # OOM, a port clash - or, most often, config-server being mid-restart when
+    # this service starts. compose sets fail-fast and the config client has no
+    # spring-retry to make its retry settings live, so that last one is an exit
+    # rather than a wait. Keep the CONTAINER up when any of it happens.
+    #
+    # And restart the application, backing off, a bounded number of times.
+    # Waiting for a save left every service whose start overlapped
+    # config-server's restart down until you went and touched it, for a cause
+    # that was gone as soon as config-server was back. A failure that outlasts
+    # every attempt is a real one, and waits for a fix-and-save as before.
     if [ -n "$APP_PID" ] && ! kill -0 "$APP_PID" 2>/dev/null; then
         wait "$APP_PID" 2>/dev/null || true
         APP_PID=""
-        log "the application exited - save a file to build and start it again" >&2
+        now=$(date +%s)
+
+        # Up this long means it was healthy: a new failure with a fresh budget,
+        # not the next attempt at an old one.
+        if [ $((now - APP_STARTED)) -ge "$STABLE_SECS" ]; then
+            RESTARTS=0
+        fi
+
+        if [ "$RESTARTS" -lt "$MAX_RESTARTS" ]; then
+            delay=$((RESTART_DELAY << RESTARTS))
+            RESTARTS=$((RESTARTS + 1))
+            RESTART_AT=$((now + delay))
+            log "the application exited - restarting in ${delay}s (attempt $RESTARTS of $MAX_RESTARTS)" >&2
+        else
+            log "the application exited again after $MAX_RESTARTS restarts - save a file to build and start it again" >&2
+        fi
     fi
 
     if [ -n "$(build_changed)" ]; then
@@ -221,7 +263,7 @@ while :; do
         # application alone rather than killing it and failing to come back.
         if run_compile; then
             stop_app
-            start_app
+            start_app_fresh
         else
             log "BUILD FILE BROKEN - still serving the previous build" >&2
         fi
@@ -243,10 +285,19 @@ while :; do
             if [ -n "$APP_PID" ]; then
                 log "recompiled - DevTools will restart the context"
             else
-                start_app
+                start_app_fresh
             fi
         else
             log "COMPILE FAILED - still serving the last good build" >&2
         fi
+    fi
+
+    # Checked last, so a save in the same tick starts the new build instead of
+    # the old one being started and then immediately replaced. It starts
+    # whatever target/classes holds, which a failed compile leaves alone - see
+    # COMPILE FAILED above - so a broken edit cannot be what this launches.
+    if [ -z "$APP_PID" ] && [ "$RESTART_AT" -gt 0 ] && [ "$(date +%s)" -ge "$RESTART_AT" ]; then
+        RESTART_AT=0
+        start_app
     fi
 done

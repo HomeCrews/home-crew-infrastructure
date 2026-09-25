@@ -104,11 +104,17 @@ their daemon instead of each holding a JVM for the default three hours. And
 `mvnd.jvmArgs` caps it, because the daemon is a third persistent JVM in a 1g
 container.
 
-**The fastest option is still your IDE.** If IntelliJ compiles on save, the
-container's compile step disappears from the critical path entirely and you are
-left with just DevTools' poll and the context restart - around 3s, with no mvnd
-involved. The catch is the one in "Things worth knowing" below: two compilers
-writing one `target/classes`.
+**Your IDE's compiler does not reach the container, on purpose.** Each service
+container compiles into its own `target/` - a named volume mounted over
+`/app/target` - not the one in your checkout. Sharing it meant two compilers
+writing one `target/classes`: the VS Code Java extension builds into it on the
+host, so one save restarted the service twice, and anything that made the IDE
+rebuild the workspace (opening it, a pull, a pom change) restarted every service
+at once. With config-server bouncing in the middle of that, the others failed
+their config fetch and stayed down. A host `./mvnw clean verify`, which the
+pre-push hook runs, also deleted the classes out from under the running
+application. The container's own compile is now the only path in, and the
+host's `target/` is yours to build into.
 
 What makes the rest work is that **no container holds a copy of your code**.
 `compose.dev.yml` puts every service on `Dockerfile.dev` - a bare JDK, no
@@ -116,8 +122,8 @@ application - and bind-mounts its checkout at `/app`. `dev-reload.sh` then runs
 two things inside each container:
 
 1. a loop that polls the checkout and compiles, and
-2. `mvnw spring-boot:run`, whose DevTools restarts the context when
-   `target/classes` changes underneath it.
+2. `mvnw spring-boot:run`, whose DevTools restarts the context when the
+   container's `target/classes` changes underneath it.
 
 Resources ride the same path as source, because `mvn compile` runs
 `process-resources` - so an edited `application.properties` is copied into
@@ -198,8 +204,18 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   waiting, rather than exiting and being restarted straight back into the same
   failure.
 - **If the application dies anyway** - a context that fails to refresh, an OOM,
-  a port clash - the container stays up and says so. Fix the code and save; the
-  loop builds and starts it again. You should not need `docker restart`.
+  a port clash, or most often config-server restarting at the same moment - the
+  container stays up and restarts it, waiting 5s, then 10, 20, 40 and 80. A
+  cause that clears in that time (config-server coming back) heals on its own;
+  one that outlasts all five attempts is a real failure, and the log says to
+  fix the code and save, which starts it again with a fresh set of attempts. You
+  should not need `docker restart`.
+- **A failed DevTools restart is not an exit, so it is not retried.** DevTools
+  restarts the context inside the running JVM; if that restart fails, the JVM
+  stays up waiting for the next classpath change, and from outside it looks
+  alive. Save a file in that service to bring it back. The usual cause is the
+  same one - config-server was down - and it goes away once the config client's
+  retry is live (see `spring.cloud.config.retry.*` in the services).
 - **Debuggers are on 5005 upwards**, in the order services are listed in
   `compose.dev.yml`. DevTools restarts happen inside the same JVM, so an
   attached debugger survives them.
@@ -224,11 +240,14 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   the pre-commit hook, the pre-push `clean verify` and CI all still run it, on
   the host, where `spotless:apply` is there to fix what they find. The inner loop
   answers *does this compile*; the gates answer *is this fit to commit*.
-- **Do not run `./mvnw` in a service repository while the stack is up.** The
-  container is compiling into that same `target/` over the mount.
+- **Running `./mvnw` in a service repository while the stack is up is fine.**
+  The container builds into its own `target/` volume, so a host build - the
+  pre-push hook's `clean verify` included - no longer touches what the running
+  service is loaded from. `docker compose down -v` empties those volumes along
+  with the databases, and the next start compiles from cold.
 - **On Linux hosts**, the containers' Maven runs as root and will leave
-  root-owned files in the mounted `target/` and `~/.m2`. macOS and Windows are
-  fine, because Docker Desktop maps the ownership.
+  root-owned files in the mounted `~/.m2`. macOS and Windows are fine, because
+  Docker Desktop maps the ownership.
 
 ## Topology
 
