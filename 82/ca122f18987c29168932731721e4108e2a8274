@@ -1,0 +1,18 @@
+README.md
+  h_bfc075b6e02f74 125-135,139-140,206-208
+compose.dev.yml
+  h_bfc075b6e02f74 66-68,107-109,148-150,186-188,224-226,262-264,300-302,338-340,376-378,414-416,452-454,490-492
+dev-reload.sh
+  h_bfc075b6e02f74 9-12,36-45,291-294,297-299,310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "82ca122f18987c29168932731721e4108e2a8274",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
