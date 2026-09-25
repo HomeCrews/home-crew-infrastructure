@@ -176,7 +176,11 @@ function Command-Up {
     # --build so the shared dev runtime image exists. It is one FROM and an
     # apt-get, so rebuilding it is cheap and always doing it means a change to
     # Dockerfile.dev cannot be silently ignored.
-    Invoke-Compose @('up', '-d', '--build')
+    Invoke-Compose @(
+        'up', '-d', '--build',
+        '--wait',
+        '--wait-timeout', '120'
+    )
 
     Write-Output @'
 
