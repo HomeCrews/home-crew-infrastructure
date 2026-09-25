@@ -100,7 +100,11 @@ cmd_up() {
     # --build so the shared dev runtime image exists. It is one FROM and an
     # apt-get, so rebuilding it is cheap and always doing it means a change to
     # Dockerfile.dev cannot be silently ignored.
-    compose up -d --build
+    #
+    # --wait with no --wait-timeout, as in dev.ps1: the healthchecks already
+    # bound it, and a shorter timeout leaves every dependent Created and never
+    # started. See the note there.
+    compose up -d --build --wait
 
     cat <<'EOF'
 

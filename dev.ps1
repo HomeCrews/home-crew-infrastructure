@@ -176,11 +176,15 @@ function Command-Up {
     # --build so the shared dev runtime image exists. It is one FROM and an
     # apt-get, so rebuilding it is cheap and always doing it means a change to
     # Dockerfile.dev cannot be silently ignored.
-    Invoke-Compose @(
-        'up', '-d', '--build',
-        '--wait',
-        '--wait-timeout', '120'
-    )
+    #
+    # --wait, but NO --wait-timeout. compose already bounds the wait: the dev
+    # override gives service-discovery and config-server a 240s start_period
+    # and 40 retries, because a cold compile does not fit in less, and every
+    # other service starts only once those two are healthy. A timeout shorter
+    # than that chain cancels compose's own dependency wait and leaves every
+    # dependent Created and never started - which is what 120s did on the first
+    # start after each container got its own, initially empty, target/ volume.
+    Invoke-Compose @('up', '-d', '--build', '--wait')
 
     Write-Output @'
 
