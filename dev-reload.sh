@@ -221,14 +221,15 @@ while :; do
     sleep "$INTERVAL"
 
     # The application can die on its own: a context that fails to refresh, an
-    # OOM, a port clash - or, most often, config-server being mid-restart when
-    # this service starts. compose sets fail-fast and the config client has no
-    # spring-retry to make its retry settings live, so that last one is an exit
-    # rather than a wait. Keep the CONTAINER up when any of it happens.
+    # OOM, a port clash - or config-server being down for longer than this
+    # service's config import will wait. compose sets fail-fast, and the client
+    # retries for roughly 75s (spring.cloud.config.retry.* in each service, made
+    # live by spring-retry in its pom) before giving up and exiting. Keep the
+    # CONTAINER up when any of it happens.
     #
     # And restart the application, backing off, a bounded number of times.
-    # Waiting for a save left every service whose start overlapped
-    # config-server's restart down until you went and touched it, for a cause
+    # Waiting for a save left every service whose start overlapped a long
+    # config-server restart down until you went and touched it, for a cause
     # that was gone as soon as config-server was back. A failure that outlasts
     # every attempt is a real one, and waits for a fix-and-save as before.
     if [ -n "$APP_PID" ] && ! kill -0 "$APP_PID" 2>/dev/null; then

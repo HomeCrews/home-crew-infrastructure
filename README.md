@@ -204,18 +204,18 @@ trap the `DB_USERNAME` comment in `docker-compose.yml` warns about.
   waiting, rather than exiting and being restarted straight back into the same
   failure.
 - **If the application dies anyway** - a context that fails to refresh, an OOM,
-  a port clash, or most often config-server restarting at the same moment - the
-  container stays up and restarts it, waiting 5s, then 10, 20, 40 and 80. A
-  cause that clears in that time (config-server coming back) heals on its own;
-  one that outlasts all five attempts is a real failure, and the log says to
-  fix the code and save, which starts it again with a fresh set of attempts. You
-  should not need `docker restart`.
+  a port clash, or config-server down for longer than the config client's retry
+  (about 75s) - the container stays up and restarts it, waiting 5s, then 10, 20,
+  40 and 80. A cause that clears in that time heals on its own; one that
+  outlasts all five attempts is a real failure, and the log says to fix the code
+  and save, which starts it again with a fresh set of attempts. You should not
+  need `docker restart`.
 - **A failed DevTools restart is not an exit, so it is not retried.** DevTools
   restarts the context inside the running JVM; if that restart fails, the JVM
   stays up waiting for the next classpath change, and from outside it looks
-  alive. Save a file in that service to bring it back. The usual cause is the
-  same one - config-server was down - and it goes away once the config client's
-  retry is live (see `spring.cloud.config.retry.*` in the services).
+  alive. Save a file in that service to bring it back. A config-server restart
+  is no longer a likely cause: every config client carries spring-retry, so its
+  import waits out a bounce (`spring.cloud.config.retry.*`) instead of failing.
 - **Debuggers are on 5005 upwards**, in the order services are listed in
   `compose.dev.yml`. DevTools restarts happen inside the same JVM, so an
   attached debugger survives them.
