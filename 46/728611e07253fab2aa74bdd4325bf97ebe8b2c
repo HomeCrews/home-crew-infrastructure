@@ -1,0 +1,18 @@
+test/lib/SuiteCli.ps1
+  h_bfc075b6e02f74 418-431
+test/lib/SuiteReload.ps1
+  h_bfc075b6e02f74 1246
+test/static/sh-syntax.sh
+  h_bfc075b6e02f74 116-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "46728611e07253fab2aa74bdd4325bf97ebe8b2c",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
