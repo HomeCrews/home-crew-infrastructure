@@ -1,0 +1,18 @@
+# Baseline commits: the state of every repository before the dev-setup change.
+# The parity and mutation suites compare the new setup against these.
+# repo<TAB>commit
+home-crew-admin-service	17a7a95
+home-crew-api-gateway	8677098
+home-crew-assignment-service	df5136b
+home-crew-auth-service	0de5f17
+home-crew-booking-service	5ee0595
+home-crew-config	933cb78
+home-crew-config-server	171e2d3
+home-crew-infrastructure	82ca122
+home-crew-notification-service	7a772a9
+home-crew-payment-service	45501f7
+home-crew-service-discovery	7499f3b
+home-crew-user-service	8967ee6
+home-crew-webapp	f4d400c
+home-crew-worker-service	f367d1c
+home-crew-xp-service	2cac79f

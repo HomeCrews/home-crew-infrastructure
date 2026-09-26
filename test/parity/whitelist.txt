@@ -1,0 +1,54 @@
+# What suite E (parity) allows to differ between the two launches of a service:
+#
+#   OLD  spring-boot:run, started by the baseline dev-reload.sh
+#   NEW  java, started by today's dev-reload.sh
+#
+# Read by test/java/LaunchDiff.java. Anything NOT listed here must be identical
+# in both launches - every environment variable and every system property of
+# the application JVM. So each line below is a claim that this particular
+# difference cannot change how the application behaves, and the reason says
+# why. Keep the reasons checkable; "it differed" is not one.
+#
+# Values that change between two launches of the SAME kind - a temp directory
+# with a random name, say - do not need a line: the suite launches NEW twice
+# for user-service and config-server and ignores whatever differed between
+# those two (results/<run>/parity/volatile.txt). Only differences that come
+# from the launch itself, or from the harness running OLD and NEW in two
+# containers, belong here.
+#
+# Format: whitespace-separated, and the reason is the rest of the line.
+#
+#     <kind> <key> <allowed> <reason>
+#
+#   kind      env    an environment variable (/proc/<pid>/environ)
+#             prop   a system property (jcmd VM.system_properties)
+#   allowed   old-only   present in OLD, absent in NEW (equal if in both)
+#             new-only   present in NEW, absent in OLD (equal if in both)
+#             value      present in both; the value may differ
+#             any        may differ in any way, presence included
+#
+# The Maven wrapper's leaks: spring-boot:run's fork inherits the environment
+# of the Maven JVM, and apache-maven-3.9.16/bin/mvn changes that environment
+# before it starts Maven. Nothing in the application reads these names.
+env  MAVEN_PROJECTBASEDIR  old-only  bin/mvn exports it (export MAVEN_PROJECTBASEDIR) for Maven's own use; NEW starts no Maven, so it has none
+env  MAVEN_CMD_LINE_ARGS   old-only  bin/mvn exports the wrapper's command line (export MAVEN_CMD_LINE_ARGS); NEW starts no Maven, so it has none
+env  MAVEN_OPTS            value     compose sets it for the wrapper, and bin/mvn rewrites it in place (.mvn/jvm.config and --enable-native-access prepended) before Maven, whose environment OLD inherited; it configures the Maven JVM only, never the application's
+#
+# The harness's own doing. OLD and NEW run in two containers, hct-old-<svc>
+# and hct-new-<svc>, and docker sets HOSTNAME to each container's id. In the
+# dev stack a service runs in exactly one container, so there it is one value.
+env  HOSTNAME  value  docker sets it to the container id, and OLD and NEW are two containers of the same service definition (a harness artefact, not a launch difference)
+#
+# Shell bookkeeping. Which shells a launch passed through (dash for both
+# scripts; mvnw and bin/mvn in OLD as well) decides these, not the launch. The
+# working directory they describe is checked directly, by E-<svc>-cwd.
+env  PWD     any  set by whichever shell ran last on the way to the JVM; E-<svc>-cwd compares the real working directory instead
+env  OLDPWD  any  set by cd in whichever shell ran last on the way to the JVM; meaningless to the application
+env  SHLVL   any  set only by bash, and whether a bash is on the way depends on the launcher scripts, not on the application's configuration
+env  _       any  bash's record of the last command it ran; shell noise
+#
+# System properties.
+prop  java.class.path  any    the same list as java_class_path in VM.command_line, which E-<svc>-classpath compares entry by entry and in order, with the one allowed difference (the empty starter jars spring-boot:run filters out)
+prop  PID              value  Spring Boot writes the process id here (ApplicationPid); OLD and NEW are different processes by construction, and two NEW launches in fresh containers can get the SAME pid, so learning cannot be relied on to find it
+prop  catalina.base    value  embedded Tomcat's base directory, a fresh /tmp/tomcat.<port>.<random> for every start
+prop  catalina.home    value  embedded Tomcat's home directory, the same fresh /tmp/tomcat.<port>.<random> as catalina.base

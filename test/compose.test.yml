@@ -1,0 +1,127 @@
+# Loaded as a THIRD compose file by test/, always with its own project name:
+#
+#     docker compose -p homecrew-test -f docker-compose.yml -f compose.dev.yml \
+#                    -f test/compose.test.yml ...
+#
+# It turns the dev stack into one that cannot touch yours: no pinned container
+# names (they would collide with homecrew-postgres and friends), no host ports
+# (they would collide with your 127.0.0.1 ones), no restart policy (so nothing
+# revives after a Docker restart), a network and a Maven volume of its own, and
+# every service checkout mounted READ-ONLY - a test build cannot write to your
+# repositories, .git/config included. The project name makes every other
+# volume (targets, databases) the test project's own.
+#
+# The tags are written out on every service rather than shared through an
+# anchor: compose applies !reset and !override to the node they sit on, and a
+# node shared by aliases is one node.
+#
+# Relative paths resolve against docker-compose.yml's directory, as in
+# compose.dev.yml. A service's /app entry here replaces compose.dev.yml's (same
+# target), and /test is added.
+
+services:
+  postgres:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+  kafka:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+  webapp:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+  service-discovery:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-service-discovery:/app:ro
+      - ./test:/test:ro
+  config-server:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-config-server:/app:ro
+      - ./test:/test:ro
+  api-gateway:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-api-gateway:/app:ro
+      - ./test:/test:ro
+  auth-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-auth-service:/app:ro
+      - ./test:/test:ro
+  user-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-user-service:/app:ro
+      - ./test:/test:ro
+  admin-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-admin-service:/app:ro
+      - ./test:/test:ro
+  booking-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-booking-service:/app:ro
+      - ./test:/test:ro
+  worker-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-worker-service:/app:ro
+      - ./test:/test:ro
+  notification-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-notification-service:/app:ro
+      - ./test:/test:ro
+  payment-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-payment-service:/app:ro
+      - ./test:/test:ro
+  xp-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-xp-service:/app:ro
+      - ./test:/test:ro
+  assignment-service:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+    volumes:
+      - ../home-crew-assignment-service:/app:ro
+      - ./test:/test:ro
+
+networks:
+  homecrew:
+    name: homecrew-test
+
+volumes:
+  maven_repo:
+    name: homecrew-maven-repo-test
+    external: true

@@ -1,0 +1,33 @@
+# Every function in ./dev, paired with its counterpart in dev.ps1:
+#
+#     <dev name>=<dev.ps1 name>
+#
+# dev and dev.ps1 are a pair; a function added to one of them without its
+# twin is how the two drift apart, so suite B (B-MAP-01, in test/cli/run-cli.sh
+# and test/lib/SuiteCli.ps1) fails when any function of either script is
+# missing here, or when a name here no longer exists. A function with no
+# counterpart is written one-sided - '=Name' (dev.ps1 only) or 'name=' (dev
+# only) - and must say why in a comment on the same line.
+#
+# PowerShell names are compared case-insensitively, as PowerShell does.
+
+die=Die
+warn=Warn
+info=Info
+has_cr=Test-HasCR
+require_env=Require-Env
+require_docker=Require-Docker
+compose_version_ok=Test-ComposeVersion
+require_compose=Require-Compose
+require_lf=Require-Lf
+require_siblings=Require-Siblings
+compose=Invoke-Compose
+preflight=Preflight
+cmd_up=Command-Up
+cmd_down=Command-Down
+cmd_logs=Command-Logs
+
+=Invoke-Docker        # every docker call under a local $ErrorActionPreference = 'Continue': 5.1 turns native stderr redirected by the CALLER into terminating errors; sh just calls docker
+=Test-Docker          # Windows PowerShell 5.1 turns redirected native stderr into error records that throw under EAP=Stop; sh just writes >/dev/null 2>&1
+=Get-DockerOutput     # the same 5.1 guard, for the one call whose stdout is read (compose version --short); sh uses $(... 2>/dev/null)
+=Command-Help         # ./dev prints its help inline in the case statement (one awk line); dev.ps1 needs a loop over Get-Content

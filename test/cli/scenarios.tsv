@@ -1,0 +1,143 @@
+# Suite B (cli): the scenarios both launchers are run through, against a fake
+# docker. Read by test/cli/run-cli.sh (./dev under sh, dash, busybox, Git Bash)
+# and test/cli/Invoke-CliScenarios.ps1 (dev.ps1 under Windows PowerShell 5.1
+# and PowerShell 7, and ./dev under Git Bash with FakeDocker.exe). One table
+# for every implementation is the point: dev and dev.ps1 are a pair, and this
+# is what "the same behaviour" means, written down.
+#
+# TAB-separated, ten columns, no empty fields: '-' is "nothing". (A shell
+# `read` with IFS=<tab> would silently merge two adjacent tabs, so an empty
+# field would shift every column after it.)
+#
+#   id      scenario name; results are B-<implementation>-<id>
+#   argv    the launcher's arguments, split on spaces; '-' for none
+#   setup   comma list of sandbox changes and check modifiers:
+#             noenv          no .env
+#             utf16env       .env saved as UTF-16LE with a BOM (what 5.1's > writes)
+#             crlfenv        .env with CRLF line endings (must still work)
+#             latin1env      .env also holds a Latin-1 byte (0xE9) and no NUL:
+#                            still plain text, must still work
+#             missing-xp     home-crew-xp-service has no pom.xml
+#             crlf-mvnw      home-crew-user-service/mvnw has CRLF line endings
+#             crlf-reload    dev-reload.sh has CRLF line endings
+#             nodocker       PATH has no docker at all (the run is refused, not
+#                            risked, if a real docker is still reachable)
+#             spring-profile SPRING_PROFILES_ACTIVE=dev in the environment
+#             cwd-root       run from the infra checkout as ./dev (.\dev.ps1)
+#             cwd-sibling    run from home-crew-user-service as
+#                            ../home-crew-infrastructure/dev
+#                            (default: run by absolute path from <SIB>/elsewhere)
+#             hostile-sp     the checkouts live under 'hc cli [x]'
+#             hostile-u      the checkouts live under 'hc-' + e-acute (U+00E9),
+#                            generated at run time so this file stays ASCII
+#             sh-only        ./dev only (sh, dash, busybox, gitbash, wsl)
+#             ps-only        dev.ps1 only (ps51, ps7)
+#             expect-msys    every docker call must see MSYS_NO_PATHCONV=1 and
+#                            MSYS2_ARG_CONV_EXCL=* (./dev exports both)
+#             hijack         dev.ps1 runs under -Command with a `docker`
+#                            FUNCTION defined; it must still call the fake .exe
+#   env     KEY=VALUE;KEY=VALUE for the fake (see test/cli/fake-docker.sh):
+#             FAKE_INFO_EXIT FAKE_INFO_STDERR FAKE_COMPOSE_VERSION (@empty =
+#             prints nothing) FAKE_VERSION_EXIT FAKE_VOLUME_CREATE_EXIT
+#             FAKE_CONFIG_EXIT FAKE_COMPOSE_EXIT FAKE_COMPOSE_STDERR
+#   exit    the launcher's exit code, exactly
+#   calls   the docker calls, in order, ';'-separated, each argv joined by one
+#           space; '-' for none. Separately, every `compose -f ...` call must
+#           run with the infra checkout as its working directory (the -f paths
+#           are relative on purpose), in every scenario.
+#   stderr  '(empty)' = stderr must be empty; '-' = not checked; otherwise
+#           '|'-separated substrings that must all appear. Paths are compared
+#           after normalisation: the sandbox becomes <ROOT> (the infra
+#           checkout), <SIB> (the directory holding all the checkouts) or
+#           <BASE>, and '\' becomes '/'. Only wording the two launchers share
+#           is used (dev says `cp`, dev.ps1 says `Copy-Item`, and so on).
+#   stdout  '|'-separated substrings of stdout; a leading '!' means "must NOT
+#           appear"; '-' = not checked
+#   info    every '==> ' line on stdout, in order, '|'-separated; '-' = there
+#           must be none. Compared exactly.
+#   req     requirement ids (R9 CLI parity, R1 the Maven volume lifecycle)
+#
+# Across implementations (B-PARITY-<id>) the exit code, the calls with their
+# working directories, and the '==>' lines must be identical.
+#
+# Rows that pin a defect this table has found, so that it stays fixed:
+#   help-title         dev.ps1's help once skipped its first header line (a
+#                      shebang in ./dev, but the title in dev.ps1)
+#   env-latin1         ./dev once ran `tr` in the user's locale: BSD tr in a
+#                      UTF-8 locale stops at the first byte that is not UTF-8,
+#                      and a valid .env was refused as "UTF-16"
+#   up-compose-stderr  compose writes its progress to stderr; under Windows
+#                      PowerShell 5.1 with stderr captured, an unguarded native
+#                      call turns that into a terminating error
+#
+# Both launchers are case-sensitive, as ./dev is: `UP` is an unknown command
+# and `down -V` is not `down -v` (command-case, down-v-upper). PowerShell's
+# switch and -contains ignore case unless told otherwise.
+#
+# missing-xp checks for <SIB> but not the quoting around it: ./dev prints
+# cd "<SIB>" and dev.ps1 cd '<SIB>', each right for its own shell.
+# id	argv	setup	env	exit	calls	stderr	stdout	info	req
+help	help	-	-	0	-	(empty)	up [svc...]|down [flags...]|logs [args...]	-	R9
+help-short	-h	-	-	0	-	(empty)	up [svc...]|down [flags...]|logs [args...]	-	R9
+help-long	--help	-	-	0	-	(empty)	up [svc...]|down [flags...]|logs [args...]	-	R9
+noargs	-	-	-	0	-	(empty)	up [svc...]|down [flags...]|logs [args...]	-	R9
+help-title	help	-	-	0	-	(empty)	HomeCrew, running locally, in watch mode	-	R9
+help-no-env	help	noenv,nodocker	-	0	-	(empty)	up [svc...]	-	R9
+bogus	bogus	-	-	1	-	unknown command 'bogus'; try 	-	-	R9
+command-case	UP	-	-	1	-	unknown command 'UP'; try 	-	-	R9
+up	up	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.|fake-docker: compose up|service-discovery 5005	==> starting every service in watch mode	R9,R1
+up-svc	up user-service	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait user-service	(empty)	The containers are up.|fake-docker: compose up|service-discovery 5005	==> starting user-service and what it depends on, in watch mode	R9,R1
+up-two	up user-service auth-service	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait user-service auth-service	(empty)	The containers are up.|fake-docker: compose up|service-discovery 5005	==> starting user-service auth-service and what it depends on, in watch mode	R9,R1
+up-webapp	up webapp	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait webapp	(empty)	The containers are up.|fake-docker: compose up|service-discovery 5005	==> starting webapp and what it depends on, in watch mode	R9,R1
+down	down	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down	(empty)	fake-docker: compose down	==> stopping everything, keeping the volumes	R9
+down-v	down -v	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -v	(empty)	fake-docker: compose down	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
+down-volumes	down --volumes	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down --volumes	(empty)	fake-docker: compose down	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
+down-orphans-v	down --remove-orphans -v	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down --remove-orphans -v	(empty)	fake-docker: compose down	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
+down-orphans	down --remove-orphans	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down --remove-orphans	(empty)	fake-docker: compose down	==> stopping everything, keeping the volumes	R9
+down-v-upper	down -V	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -V	(empty)	fake-docker: compose down	==> stopping everything, keeping the volumes	R9
+logs	logs	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml logs -f --tail 100	(empty)	fake-docker: compose logs	-	R9
+logs-svc	logs api-gateway	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml logs -f --tail 100 api-gateway	(empty)	fake-docker: compose logs	-	R9
+logs-t	logs -t api-gateway	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml logs -f --tail 100 -t api-gateway	(empty)	fake-docker: compose logs	-	R9
+logs-posix-path	logs /root/.m2	-	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml logs -f --tail 100 /root/.m2	(empty)	fake-docker: compose logs	-	R9
+env-missing	up	noenv	-	1	-	<ROOT>/.env is missing.|CONFIG_GIT_USERNAME and CONFIG_GIT_TOKEN	-	-	R9
+env-missing-down	down -v	noenv	-	1	-	<ROOT>/.env is missing.	-	-	R9
+env-missing-logs	logs	noenv	-	1	-	<ROOT>/.env is missing.	-	-	R9
+env-utf16	up	utf16env	-	1	-	<ROOT>/.env is not plain text - it looks UTF-16	-	-	R9
+env-crlf	up	crlfenv	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+env-latin1	up	latin1env	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+spring-profile	up	spring-profile	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	WARNING: SPRING_PROFILES_ACTIVE=dev is set in your environment and overrides|WARNING: the stack's default profile (container).	The containers are up.	==> starting every service in watch mode	R9,R1
+missing-xp	up	missing-xp	-	1	info;compose version --short	These checkouts are missing or incomplete: home-crew-xp-service|git clone git@github.com:HomeCrews/home-crew-xp-service.git|<SIB>	!The containers are up.	-	R9
+missing-xp-down	down	missing-xp	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down	(empty)	-	==> stopping everything, keeping the volumes	R9
+crlf-mvnw	up	crlf-mvnw	-	1	info;compose version --short	These files have Windows (CRLF) line endings|<SIB>/home-crew-user-service/mvnw	-	-	R9
+crlf-reload	up	crlf-reload	-	1	info;compose version --short	These files have Windows (CRLF) line endings|<ROOT>/dev-reload.sh	-	-	R9
+no-docker	up	nodocker	-	1	-	docker is not on PATH.	-	-	R9
+daemon-down	up	-	FAKE_INFO_EXIT=1	1	info	docker is installed but the daemon is not responding.	-	-	R9
+info-stderr	up	-	FAKE_INFO_STDERR=WARNING: Plugin buildx is not valid	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-2.24.3	up	-	FAKE_COMPOSE_VERSION=2.24.3	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is '2.24.3'.	-	-	R9
+compose-v2.24.3	up	-	FAKE_COMPOSE_VERSION=v2.24.3	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is 'v2.24.3'.	-	-	R9
+compose-1.29.2	up	-	FAKE_COMPOSE_VERSION=1.29.2	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is '1.29.2'.	-	-	R9
+compose-garbage	up	-	FAKE_COMPOSE_VERSION=garbage	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is 'garbage'.	-	-	R9
+compose-two-part	up	-	FAKE_COMPOSE_VERSION=2.24	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is '2.24'.	-	-	R9
+compose-empty	up	-	FAKE_COMPOSE_VERSION=@empty	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is 'unknown'.	-	-	R9
+compose-missing	down	-	FAKE_VERSION_EXIT=1	1	info;compose version --short	Docker Compose 2.24.4 or later is required; this is 'unknown'.	-	-	R9
+compose-2.24.4	up	-	FAKE_COMPOSE_VERSION=2.24.4	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-v2.24.4	up	-	FAKE_COMPOSE_VERSION=v2.24.4	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-2.24.10	up	-	FAKE_COMPOSE_VERSION=2.24.10	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-desktop	up	-	FAKE_COMPOSE_VERSION=2.39.1-desktop.1	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-2.100.0	up	-	FAKE_COMPOSE_VERSION=2.100.0	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+compose-3.0.0	up	-	FAKE_COMPOSE_VERSION=3.0.0	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+volume-create-fails	up	-	FAKE_VOLUME_CREATE_EXIT=5	5	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo	-	!The containers are up.	-	R9,R1
+config-fails	up	-	FAKE_CONFIG_EXIT=3	3	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet	-	!The containers are up.	-	R9
+up-exit-17	up	-	FAKE_COMPOSE_EXIT=17;FAKE_CONFIG_EXIT=0	17	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	-	!The containers are up.	==> starting every service in watch mode	R9
+down-exit-17	down -v	-	FAKE_COMPOSE_EXIT=17	17	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -v	-	-	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9
+logs-exit-17	logs	-	FAKE_COMPOSE_EXIT=17	17	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml logs -f --tail 100	-	-	-	R9
+up-compose-stderr	up	-	FAKE_COMPOSE_STDERR=[+] Running 3/3	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	[+] Running 3/3	The containers are up.	==> starting every service in watch mode	R9,R1
+cwd-root	up	cwd-root	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+cwd-sibling	down -v	cwd-sibling	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -v	(empty)	-	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
+msys-env	down	sh-only,expect-msys	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down	(empty)	-	==> stopping everything, keeping the volumes	R9
+ps-hijack	down	ps-only,hijack	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down	(empty)	-	==> stopping everything, keeping the volumes	R9
+hostile-sp-up	up	hostile-sp	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+hostile-sp-down-v	down -v	hostile-sp	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -v	(empty)	-	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
+hostile-sp-env-missing	up	hostile-sp,noenv	-	1	-	<ROOT>/.env is missing.	-	-	R9
+hostile-u-up	up	hostile-u	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml config --quiet;volume create homecrew-maven-repo;compose -f docker-compose.yml -f compose.dev.yml up -d --build --wait	(empty)	The containers are up.	==> starting every service in watch mode	R9,R1
+hostile-u-down-v	down -v	hostile-u	-	0	info;compose version --short;compose -f docker-compose.yml -f compose.dev.yml down -v	(empty)	-	==> stopping everything and emptying the volumes (the Maven cache is kept)	R9,R1
