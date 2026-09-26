@@ -63,14 +63,18 @@ info() {
     fi
 }
 
-# 0 = has a CR, 1 = none. A file grep cannot read is an error, not "clean":
+# 0 = has a CR, 1 = none. A file that cannot be read is an error, not "clean":
 # failing open here would start twelve containers on a script nobody checked.
+# tr and cmp, like the UTF-16 check below, not grep: GNU grep on Windows - Git
+# Bash's included - drops the CRs of a file it takes for text before matching,
+# so a grep for one never finds it there.
 has_cr() {
+    [ -r "$1" ] || die "cannot read $1 to check its line endings"
     _rc=0
-    grep -q "$(printf '\r')" "$1" 2>/dev/null || _rc=$?
+    LC_ALL=C tr -d '\015' <"$1" | cmp -s - "$1" || _rc=$?
     case $_rc in
-        0) return 0 ;;
-        1) return 1 ;;
+        0) return 1 ;;
+        1) return 0 ;;
         *) die "cannot read $1 to check its line endings" ;;
     esac
 }
