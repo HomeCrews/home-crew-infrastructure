@@ -1,0 +1,14 @@
+dev
+  h_bfc075b6e02f74 66,68-70,72,74,76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b23de10b7ab899c7c3bb581e723d4c9403c93912",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
