@@ -167,8 +167,8 @@ MVN_FLAGS="$MVN_FLAGS -Daether.syncContext.named.factory=file-lock -Daether.sync
 # unlinking the file the moment it is opened: the next process creates a NEW
 # file with the same name, locks that inode, and the two never meet. It is read
 # ONCE, from System properties, when the lock class loads, so it has to be on
-# the JVM's own command line - MAVEN_OPTS for the wrapper, mvnd.jvmArgs for the
-# daemon - not a -D to an already-running Maven.
+# the JVM's own command line - MAVEN_OPTS for the wrapper, JDK_JAVA_OPTIONS for
+# the mvnd daemon (see mvnd_cmd) - not a -D to an already-running Maven.
 LOCK_JVM_PROP="-Daether.named.file-lock.deleteLockFiles=false"
 
 log() { printf '[dev-reload] %s: %s\n' "$1" "$2"; }
@@ -267,13 +267,20 @@ settle() {
 #   idleTimeout    so that the services you are not editing let their daemon go
 #                  instead of each holding a JVM for the default three hours.
 #   maxHeapSize    the daemon is the second persistent JVM in a 1g container,
-#                  so it is capped. Through this option, not an -Xmx in
-#                  jvmArgs: mvnd appends its own -Xmx (2g by default) after
-#                  jvmArgs, and the last one wins.
-#   jvmArgs        carries the lock property above, because it is the daemon's
-#                  JVM that loads the lock class, not this client.
+#                  so it is capped. Through this option, not an -Xmx among its
+#                  JVM options: mvnd appends its own -Xmx (2g by default) after
+#                  them, and the last one wins.
+#
+# The lock property goes to the daemon in JDK_JAVA_OPTIONS, which the java
+# launcher reads, and which the daemon - started by this client - inherits.
+# -Dmvnd.jvmArgs did not get it there - most likely because every service has
+# a .mvn/jvm.config, which mvnd uses for the daemon's JVM options in its place
+# - and no lock file outlived an mvnd build (the harness's first Windows run:
+# D-SCAN-mvnd-LOCKS, D-COLD-mvnd). Only this command gets it, never the
+# application's java.
 mvnd_cmd() {
-    mvnd -Dmvnd.daemonStorage=/tmp/mvnd -Dmvnd.idleTimeout=15m -Dmvnd.maxHeapSize=320m "-Dmvnd.jvmArgs=$LOCK_JVM_PROP" "$@"
+    JDK_JAVA_OPTIONS="${JDK_JAVA_OPTIONS:+$JDK_JAVA_OPTIONS }$LOCK_JVM_PROP" \
+        mvnd -Dmvnd.daemonStorage=/tmp/mvnd -Dmvnd.idleTimeout=15m -Dmvnd.maxHeapSize=320m "$@"
 }
 
 # Every Maven invocation this script makes goes through here, so the lock
