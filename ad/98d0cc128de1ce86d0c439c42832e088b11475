@@ -1,0 +1,155 @@
+test/cli/FakeDocker.cs
+  s_4d9475bc6dfe5b::t_a7c4f71c240e7b 1-158
+test/cli/Invoke-CliScenarios.ps1
+  s_4d9475bc6dfe5b::t_81cf06f6eb5c25 1-794
+test/cli/fake-docker.sh
+  s_4d9475bc6dfe5b::t_58affd50a937d8 1-138
+test/cli/function-map.txt
+  s_4d9475bc6dfe5b::t_be34133870ffd0 1-33
+test/cli/run-cli.sh
+  s_4d9475bc6dfe5b::t_00464a67b3c265 1-595
+test/cli/scenarios.tsv
+  s_0a752160860ce1::t_d0ad8bfe6c7ed2 1-143
+test/container/build-once.sh
+  s_2f2a367cf08a61::t_2889359b47f5ff 1-289
+test/container/capture-launch.sh
+  s_52c37698116b72::t_c6ccfe5701c9b1 1-184
+test/container/scan-repo.sh
+  s_2f2a367cf08a61::t_6034028c082563 1-297
+test/container/stack-probe.sh
+  s_ce3219a47a176c::t_e9828b2f491924 1-355
+test/java/KafkaProbe.java
+  s_ce3219a47a176c::t_56e2b8487d902c 1-256
+test/java/LaunchDiff.java
+  s_22f4bdb2e7ca63::t_ac1b494a251b5a 1-832
+test/java/LockProbe.java
+  s_ce3219a47a176c::t_464400b0ad9a2f 1-223
+test/java/VerifyJars.java
+  s_4d9475bc6dfe5b::t_c2afe19a554fe9 1-189
+test/lib/SuiteCli.ps1
+  s_b083623bfb5993::t_b6ba4a23f29aca 1-455
+test/lib/SuiteConcurrency.ps1
+  s_d69f8c6dc28c0e::t_76ee41d39939e1 1-1279
+test/lib/SuiteLifecycle.ps1
+  s_6af018916a7065::t_5a92ee13842f28 1-1147
+test/lib/SuiteMutation.ps1
+  s_22f4bdb2e7ca63::t_21a2b32fae146b 1-579
+test/lib/SuiteStack.ps1
+  s_ce3219a47a176c::t_731e82b8e99bc6 1-1982
+test/lib/SuiteStatic.ps1
+  s_4ba473f252e5ab::t_fe6aca25154c45 1-1491
+test/parity/whitelist.txt
+  s_9c4aa8eaf04289::t_b5554a951308a3 1-54
+test/prod-findings.tsv
+  s_2f2a367cf08a61::t_b059ed800cccb1 1-33
+test/run.ps1
+  s_22f4bdb2e7ca63::t_5783a7c229f34f 1-160
+test/static/Test-PsParse.ps1
+  s_4ba473f252e5ab::t_4ed1eb3158147b 1-123
+test/static/sh-syntax.sh
+  s_351c8b65fb23a4::t_f7eaebbf66227f 1-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ad98d0cc128de1ce86d0c439c42832e088b11475",
+  "prompts": {},
+  "sessions": {
+    "s_0a752160860ce1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa7e83e7e98f553ee",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_22f4bdb2e7ca63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa763f3a4b1d60b21",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_2f2a367cf08a61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0d24ecfb1e13f6c9",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_351c8b65fb23a4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a342c28496a1dfd31",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_4ba473f252e5ab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a571e98953f9c0ac6",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_4d9475bc6dfe5b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a7201f281a2dfd826",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_52c37698116b72": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-abd00d465f32817f5",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_6af018916a7065": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aeee6497825f57323",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_9c4aa8eaf04289": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a98b34d66733b9406",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_b083623bfb5993": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a26048ca269ec486f",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_ce3219a47a176c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a36788430630b3d84",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    },
+    "s_d69f8c6dc28c0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa3c909710f5aa6db",
+        "model": "unknown"
+      },
+      "human_author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
