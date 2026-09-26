@@ -350,9 +350,12 @@ does not download everything again; the run removes it at the end.
   run.
 - **D-LOCK-\*.**
   - The resolver logged file-lock with file-gav.
-  - `jcmd` shows `deleteLockFiles=false` on the mvnd daemon.
+  - `jcmd` shows `deleteLockFiles=false` on the mvnd daemon. On a failure,
+    the row quotes the daemon's `JAVA_TOOL_OPTIONS` and `JDK_JAVA_OPTIONS`,
+    read from its `/proc/<pid>/environ` (those two keys only).
   - **D-MVND-OPTS:** the daemon registered in its own container's
-    `/tmp/mvnd`, not on the shared volume, and its heap is capped at 320 MB.
+    `/tmp/mvnd`, with no `registry.bin` anywhere under the shared volume's
+    `~/.m2/mvnd`, and its heap is capped at 320 MB.
   - A held lock blocks a build.
   - The reverse probe sees Maven holding the very file it created.
 - **H-VOL-02 and D-WARM.** The test project's `down -v` removes its own

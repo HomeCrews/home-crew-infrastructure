@@ -1814,7 +1814,7 @@ mvn_load() {
     cat >"$u_d/bin/mvnd" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$@" >"$HC_REC"
-printf 'JDK_JAVA_OPTIONS=%s\n' "${JDK_JAVA_OPTIONS:-}" >"$HC_REC.mvnd-env"
+printf 'JAVA_TOOL_OPTIONS=%s\n' "${JAVA_TOOL_OPTIONS:-}" >"$HC_REC.mvnd-env"
 echo x >>"$HC_REC.calls"
 exit "${HC_MVND_EXIT:-0}"
 EOF
@@ -1882,20 +1882,21 @@ mvn_mvnd() {
     # The heap cap has to be mvnd's own option: mvnd appends its default -Xmx
     # after the daemon's other JVM options, and the last -Xmx wins.
     u_heap=$(grep -- '^-Dmvnd.maxHeapSize=' "$HC_REC" | head -n 1) || u_heap=""
-    # The lock property travels in the daemon's environment, JDK_JAVA_OPTIONS
-    # (-Dmvnd.jvmArgs never got it to the daemon) - and only there: left in
-    # this shell's environment, the application's java would pick it up too.
-    u_env=$(sed -n 's/^JDK_JAVA_OPTIONS=//p' "$HC_REC.mvnd-env" 2>/dev/null) || u_env=""
+    # The lock property travels in the daemon's environment, JAVA_TOOL_OPTIONS
+    # (mvnd 1.0.2 drops it from -Dmvnd.jvmArgs and from JDK_JAVA_OPTIONS) - and
+    # only there: left in this shell's environment, the application's java
+    # would pick it up too.
+    u_env=$(sed -n 's/^JAVA_TOOL_OPTIONS=//p' "$HC_REC.mvnd-env" 2>/dev/null) || u_env=""
     u_tail=$(tail -n 4 "$HC_REC" | tr '\n' ' ')
     if [ "$u_rc" -eq 0 ] && [ -z "$u_miss" ] && [ -n "$u_heap" ] &&
        case " $u_env " in *" $LOCK_PROP "*) true ;; *) false ;; esac &&
        case $u_env in *-Xmx*) false ;; *) true ;; esac &&
-       [ -z "${JDK_JAVA_OPTIONS:-}" ] &&
+       case " ${JAVA_TOOL_OPTIONS:-} " in *" $LOCK_PROP "*) false ;; *) true ;; esac &&
        grep -qxF -- -q "$HC_REC" &&
        [ "$u_tail" = 'compile dependency:build-classpath -Dmdep.outputFile=/x/cp.txt -DincludeScope=runtime ' ]; then
-        hc_pass "$U_ID" "mvnd gets its own daemonStorage and idleTimeout, $u_heap, $LOCK_PROP in JDK_JAVA_OPTIONS for the daemon's JVM (and not in this shell's environment, which the application inherits), and every required flag"
+        hc_pass "$U_ID" "mvnd gets its own daemonStorage and idleTimeout, $u_heap, $LOCK_PROP in JAVA_TOOL_OPTIONS for the daemon's JVM (and not in this shell's environment, which the application inherits), and every required flag"
     else
-        hc_fail "$U_ID" "mvnd: status $u_rc, missing:${u_miss:- none}, heap option '${u_heap:-none}', JDK_JAVA_OPTIONS for mvnd '$u_env', left in this shell '${JDK_JAVA_OPTIONS:-}', last four [$u_tail]"
+        hc_fail "$U_ID" "mvnd: status $u_rc, missing:${u_miss:- none}, heap option '${u_heap:-none}', JAVA_TOOL_OPTIONS for mvnd '$u_env', left in this shell '${JAVA_TOOL_OPTIONS:-}', last four [$u_tail]"
     fi
     return 0
 }

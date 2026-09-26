@@ -182,10 +182,16 @@ jcmd_dump() {
         if [ "$_del" = false ]; then _ok=$((_ok + 1)); fi
         _heap=$("$_jcmd" "$_p" VM.flags 2>/dev/null | tr ' ' '\n' | sed -n 's/^-XX:MaxHeapSize=\([0-9][0-9]*\)$/\1/p' | head -n 1)
         echo "JCMD-DAEMON pid=$_p deleteLockFiles=${_del:-unset} maxHeapMB=$(( ${_heap:-0} / 1048576 ))"
+        # What the daemon was started with - these two keys only: the rest of
+        # its environment is the container's, secrets included.
+        _env=$(tr '\0' '\n' <"$_d/environ" 2>/dev/null | grep -E '^(JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS)=' | tr '\n' ' ')
+        echo "JCMD-ENV pid=$_p ${_env:-none}"
     done
+    # mvnd writes registry.bin straight into its daemonStorage, which by
+    # default is ~/.m2/mvnd/registry/<version> - on the shared volume.
     _tmp=no _m2=no
     if [ -e /tmp/mvnd/registry.bin ]; then _tmp=yes; fi
-    if [ -e "${HOME:-/root}/.m2/mvnd/registry.bin" ]; then _m2=yes; fi
+    if [ -n "$(find "${HOME:-/root}/.m2/mvnd" -name registry.bin 2>/dev/null | head -n 1)" ]; then _m2=yes; fi
     echo "JCMD-REGISTRY tmp=$_tmp m2=$_m2"
     echo "JCMD-SUMMARY daemons=$_n deleteLockFiles_false=$_ok"
 }

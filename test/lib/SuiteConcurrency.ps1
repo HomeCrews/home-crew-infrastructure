@@ -238,7 +238,9 @@ function Conc-Step-LockAdapter {
                     Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message 'no mvnd daemon JVM was running after the mvnd build (no java process with mvnd on its command line)' -Evidence @($jpath)
                 }
                 else {
-                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message "only $ok of $n mvnd daemon JVMs have aether.named.file-lock.deleteLockFiles=false: it did not reach the daemon's JVM, so the daemon deletes the lock files it takes" -Evidence @($jpath)
+                    $envs = @([regex]::Matches($b.Jcmd, 'JCMD-ENV pid=\d+ ([^\r\n]*)') | ForEach-Object { $_.Groups[1].Value.Trim() })
+                    $started = if ($envs.Count -gt 0) { '; the daemon was started with: ' + (Conc-Clip ($envs -join ' | ') 300) } else { '' }
+                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message "only $ok of $n mvnd daemon JVMs have aether.named.file-lock.deleteLockFiles=false: it did not reach the daemon's JVM, so the daemon deletes the lock files it takes$started" -Evidence @($jpath)
                 }
             }
             Conc-Report-MvndOptions -Jcmd $b.Jcmd -Evidence @($jpath)
@@ -247,7 +249,8 @@ function Conc-Step-LockAdapter {
 }
 
 # D-MVND-OPTS: what mvnd did with the rest of its options, read off the daemon
-# itself. A daemon registry on the shared volume (~/.m2/mvnd) means
+# itself. A daemon registry on the shared volume (anywhere under ~/.m2/mvnd;
+# mvnd's default storage is ~/.m2/mvnd/registry/<version>) means
 # mvnd.daemonStorage was not applied, and twelve containers would find each
 # other's daemons there; a heap above 320 MB means mvnd.maxHeapSize was not,
 # in a 1g container.
@@ -260,7 +263,7 @@ function Conc-Report-MvndOptions {
         return
     }
     $problems = [System.Collections.Generic.List[string]]::new()
-    if ($reg.Groups[2].Value -eq 'yes') { $problems.Add('a daemon registry exists on the shared volume (~/.m2/mvnd/registry.bin): mvnd.daemonStorage was not applied') }
+    if ($reg.Groups[2].Value -eq 'yes') { $problems.Add('a daemon registry exists on the shared volume (a registry.bin under ~/.m2/mvnd): mvnd.daemonStorage was not applied') }
     if ($reg.Groups[1].Value -ne 'yes') { $problems.Add('no registry in /tmp/mvnd, where mvnd.daemonStorage puts it') }
     $big = @($heaps | Where-Object { $_ -ne 320 })
     if ($big.Count) { $problems.Add("daemon max heap $($big -join ', ') MB, not the 320 MB of mvnd.maxHeapSize") }
