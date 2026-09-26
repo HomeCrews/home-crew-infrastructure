@@ -5,18 +5,26 @@
 # why all twelve services share one image: there is nothing service-specific to
 # bake in, and building it once beats building twelve.
 #
-# JDK, not JRE, unlike the production Dockerfiles - javac has to be in here.
-# Nothing in this file is used by a deployed image; those are built from the
-# Dockerfile in each service repository.
+# JDK, not JRE, unlike the production Dockerfiles: javac has to be in here, and
+# dev-reload.sh also uses javap to find the main class, the way spring-boot:run
+# does, and test/ uses jcmd to inspect the running application. Nothing in this
+# file is used by a deployed image; those are built from the Dockerfile in each
+# service repository.
 FROM eclipse-temurin:25-jdk
 
 # curl so probing a container by hand works exactly as it does against a
-# production image, which installs curl for the compose healthchecks.
+# production image, which installs curl for the compose healthchecks - and
+# because dev-reload.sh's readiness check is a curl against the application's
+# own port.
 #
-# procps for pkill, which dev-reload.sh needs to be sure the forked application
-# JVM is gone before starting its replacement. It is not in the base image, and
-# without it the fallback silently does nothing - which surfaces only as an
-# occasional "address already in use" after a pom.xml change.
+# procps for ps and pgrep, when you exec in to see what is running and for
+# test/. dev-reload.sh no longer needs pkill: the application is its direct
+# child now, not a JVM forked by Maven that could outlive the process it was
+# asked to stop with.
+#
+# flock is not installed here because it does not need to be: util-linux is part
+# of the base image, and dev-reload.sh uses it to install the Maven wrapper's
+# distribution once for all twelve containers. test/ checks it is present.
 #
 # git because the shared pom-plugins.xml shells out to it at the validate phase
 # to point core.hooksPath at .githooks. dev-reload.sh skips that execution with
@@ -37,7 +45,8 @@ RUN git config --global --add safe.directory /app
 
 WORKDIR /app
 
-# Maven Daemon, for the compile loop only.
+# Maven Daemon, for every build dev-reload.sh runs - the compile loop and the
+# dependency:build-classpath that the application's classpath comes from.
 #
 # `mvn compile` spends most of its time booting a JVM and re-checking the
 # dependency tree rather than compiling - 5-10s for a module with three source
@@ -47,10 +56,11 @@ WORKDIR /app
 # The failure here is deliberately NOT fatal. mvnd's release asset naming has
 # changed across versions, and getting it wrong should cost you the speed-up
 # rather than the whole dev environment: dev-reload.sh probes for a working
-# mvnd at startup and falls back to ./mvnw, logging which one it picked.
+# mvnd at startup and falls back to sh ./mvnw, logging which one it picked.
 #
-# 1.0.x embeds Maven 3.9.x, matching the 3.9.16 the wrapper pins. Check that
-# still holds before bumping this.
+# mvnd carries its own Maven (1.0.x embeds a 3.9.x), independent of the 3.9.16
+# the wrapper pins. dev-reload.sh's lock settings need the resolver of Maven
+# 3.9.x (1.9.12 or later) - check that still holds before bumping this.
 ARG MVND_VERSION=1.0.2
 RUN set -eu; \
     case "$(dpkg --print-architecture)" in \

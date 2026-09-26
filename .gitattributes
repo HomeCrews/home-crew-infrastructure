@@ -1,3 +1,7 @@
+# Normalise text in the repository, and let git decide what is binary. First,
+# so that every rule below overrides it rather than the other way round.
+* text=auto
+
 /dev text eol=lf
 
 *.sh        text eol=lf
@@ -7,7 +11,15 @@
 *.yaml        text eol=lf
 *.md          text eol=lf
 
-* text=auto
+# Everything below is read by Docker or by a Linux container, straight out of
+# a Windows checkout. None of it may arrive with CRLF line endings; git would
+# otherwise write them wherever core.autocrlf is on, which is the Git for
+# Windows default.
+Dockerfile*   text eol=lf
+*.sql         text eol=lf
+.env.example  text eol=lf
+/test/**      text eol=lf
+
 
 *.cmd text eol=crlf
 *.bat text eol=crlf

@@ -1,502 +1,337 @@
 # Dev override: every service runs from your checkout, hot reloading.
 #
-# Used together with docker-compose.yml, which ./dev does for you:
+# Used together with docker-compose.yml, which ./dev (or .\dev.ps1) does for you:
 #
 #     docker compose -f docker-compose.yml -f compose.dev.yml up -d
 #
-# LOCAL IMAGES ONLY. Every service here is rebuilt from Dockerfile.dev in this
-# repository and tagged homecrew-dev-runtime:jdk25, which replaces the
-# mthanuj/homecrew-*:dev image from the base file. Nothing is ever pulled from
-# Docker Hub, so a stale published tag cannot quietly replace the code you are
-# editing. One image serves all twelve: it contains a JDK and nothing else,
-# because the application arrives on a bind mount.
+# Run by hand like that, the Maven volume below has to exist first - ./dev
+# creates it:
+#
+#     docker volume create homecrew-maven-repo
+#
+# NEEDS DOCKER COMPOSE 2.24.4 OR LATER, for the !override and !reset tags below.
+# An older compose rejects this file with a YAML error that does not mention
+# versions, which is why ./dev checks the version first and says so.
+#
+# LOCAL HOMECREW IMAGES ONLY. Every Java service here is rebuilt from
+# Dockerfile.dev in this repository and tagged homecrew-dev-runtime:jdk25, which
+# replaces the mthanuj/homecrew-*:dev image from the base file, and webapp runs
+# on stock node:24-alpine. No mthanuj/homecrew-* image is ever pulled, so a
+# stale published tag cannot quietly replace the code you are editing. (The
+# public base images - eclipse-temurin, node, postgres, kafka - are pulled as
+# usual.) One image serves all twelve Java services: it contains a JDK and the
+# Maven tooling and nothing else, because the application arrives on a bind
+# mount.
 #
 # Never used by the deploy. .github/workflows/deploy.yml runs plain
 # `docker compose` with no -f flags and only scps docker-compose.yml to the
 # host, so this file cannot reach production even by accident.
 #
-# Each service gets a debugger on its own port, 5005 upwards in the order
-# below. DevTools restarts happen inside the same JVM, so an attached debugger
-# survives them.
+# EVERY PORT IS PUBLISHED ON 127.0.0.1 ONLY. The base file publishes on all
+# interfaces, which on a laptop means anyone on the same Wi-Fi could reach
+# postgres with its public default password, config-server's /decrypt, and -
+# worst - twelve JDWP debug ports, which are remote code execution without a
+# password. `ports: !override` replaces the base file's list rather than adding
+# to it (compose APPENDS ports across files otherwise, and the 0.0.0.0 binding
+# would survive). Use 127.0.0.1, not localhost, in your IDE and browser:
+# Windows resolves localhost to ::1 first, and nothing listens there.
+#
+# Debuggers: every JVM listens on container port 5005, and the HOST port is what
+# differs - the same host port per service as before:
+#
+#     service-discovery 5005    config-server 5006    api-gateway 5007
+#     auth-service      5008    user-service  5009    admin-service 5010
+#     booking-service   5011    worker-service 5012   notification-service 5013
+#     payment-service   5014    xp-service    5015    assignment-service 5016
+#
+# DevTools restarts happen inside the same JVM, so an attached debugger survives
+# them. A pom.xml change starts a new JVM, which drops the session.
 #
 # OWN target/ PER CONTAINER. Every service mounts a named volume over
 # /app/target, so the container compiles into a directory the host never sees.
 # Sharing the checkout's target/ meant two compilers writing one tree: the VS
 # Code Java extension builds into target/classes on the host, and DevTools in
-# the container restarts on any write it sees there. One save became two
-# restarts, racing each other over the same class files, and anything that makes
-# the IDE rebuild the workspace - opening it, a pull, a pom change - restarted
-# every service at once, config-server included, so the rest failed their config
-# fetch. A host `./mvnw clean verify`, which the pre-push hook runs, also deleted
-# the classes out from under the running application.
+# the container restarted on writes it saw there. One save became two restarts,
+# racing each other over the same class files, and anything that made the IDE
+# rebuild the workspace - opening it, a pull, a pom change - restarted every
+# service at once, config-server included, so the rest failed their config
+# fetch. A host `./mvnw clean verify`, which the pre-push hook runs, also
+# deleted the classes out from under the running application. The cost: an IDE
+# compile-on-save no longer reaches the container, so dev-reload.sh's own
+# compile is the only way code gets in.
 #
-# The cost: an IDE compile-on-save no longer reaches the container, so
-# dev-reload.sh's own compile is the only way code gets in. The volumes are
-# caches - `docker compose down -v` empties them along with the databases, and
-# the next start compiles from cold.
+# ONE MAVEN REPOSITORY, SHARED, IN A VOLUME - NOT YOUR ~/.m2. All twelve used
+# to bind-mount the host's ~/.m2, where twelve cold builds, twelve mvnd daemons
+# and your IDE all wrote one local repository with no lock between them: Maven
+# 3.9's default lock only coordinates threads inside one JVM. The volume is one
+# ext4 filesystem inside the Docker VM, so the cross-process file locks that
+# dev-reload.sh turns on actually work there - they are not reliable over a
+# Windows or macOS bind mount - and every jar read stops crossing the host's
+# file-sharing layer. It is EXTERNAL, so `./dev down -v` empties the databases
+# and the target/ caches but keeps the Maven cache; remove it on purpose with
+#
+#     docker volume rm homecrew-maven-repo
+#
+# The volumes are caches: `./dev down -v` empties everything else, and the next
+# start compiles from cold. A plain `docker compose down -v` without the two -f
+# flags does NOT - it only knows the volumes of docker-compose.yml.
+
+# Settings every Java service shares. One place, because a service-local
+# `environment:` replaces this map rather than adding to it - each service
+# below merges it and then adds only its own port.
+x-dev-java-env: &dev-java-env
+  # Emptied, not tuned. The production value is -Xmx128m and JAVA_TOOL_OPTIONS
+  # applies to EVERY JVM in the container, so it would cap Maven at 128m too
+  # and make the compile loop crawl.
+  JAVA_TOOL_OPTIONS: ""
+
+  # For the Maven that ./mvnw starts - the fallback when mvnd is unavailable,
+  # or one you run by hand in here. The lock property has to be on the JVM's
+  # own command line; MAVEN_ARGS carries the rest of the lock settings, so a
+  # hand-run ./mvnw locks exactly like dev-reload.sh's own builds do. See the
+  # MVN_FLAGS comments in dev-reload.sh for what each one is for.
+  MAVEN_OPTS: "-Xmx256m -Daether.named.file-lock.deleteLockFiles=false"
+  MAVEN_ARGS: "-Daether.syncContext.named.factory=file-lock -Daether.syncContext.named.nameMapper=file-gav -Daether.syncContext.named.time=900 -Daether.syncContext.named.time.unit=SECONDS -Daether.syncContext.named.retry=0"
+
+  # The application JVM's arguments, and only the application's. In
+  # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind this
+  # port as well. Container port 5005 in every service; the host port differs.
+  DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+
+  SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
+  SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
+  # Restart only when dev-reload.sh touches this file after a compile that
+  # succeeded, not on the class files javac writes along the way.
+  SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
+
+  # Passed through explicitly. .env drives compose SUBSTITUTION, not container
+  # environment, so dev-reload.sh would never see these otherwise - it would
+  # silently fall back to its own defaults and the knob in .env would look
+  # broken rather than absent. What each does: README.md, "Tuning".
+  DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
+  DEV_COMPILER: ${DEV_COMPILER:-auto}
+  DEV_MAVEN_EXTRA_ARGS: ${DEV_MAVEN_EXTRA_ARGS:-}
+  DEV_STOP_TIMEOUT: ${DEV_STOP_TIMEOUT:-35}
+  DEV_BOOT_TIMEOUT: ${DEV_BOOT_TIMEOUT:-300}
+  DEV_OPTIMIZED_LAUNCH: ${DEV_OPTIMIZED_LAUNCH:-true}
+
+x-dev-java: &dev-java
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  image: homecrew-dev-runtime:jdk25
+  pull_policy: never
+  entrypoint: ["/bin/sh", "/dev-reload.sh"]
+  working_dir: /app
+  mem_limit: ${DEV_SERVICE_MEM:-1g}
+  # Longer than dev-reload.sh's own DEV_STOP_TIMEOUT, so the application gets
+  # its graceful shutdown and the script gets to report it, before docker
+  # reaches for SIGKILL.
+  stop_grace_period: 45s
 
 services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+
+  # Reachable from the host on 9092 only in the TCP sense: the broker
+  # advertises kafka:9092, a name the host cannot resolve, so host-side Kafka
+  # clients do not work. Everything inside the network does.
+  kafka:
+    ports: !override
+      - "127.0.0.1:9092:9092"
+
+  # Every Java service below is the same five things: the shared settings, its
+  # own port for dev-reload.sh's readiness check (DEV_APP_PORT - it must match
+  # server.port), its checkout, its own target/ volume, and its two ports.
+  #
+  # To pin a main class for one service (dev-reload.sh refuses to guess when a
+  # checkout has zero or several @SpringBootApplication classes), add
+  # DEV_MAIN_CLASS to that service's environment here. A line in .env does
+  # nothing: it is deliberately not passed through, because one value cannot
+  # be right for all twelve.
+
   service-discovery:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8761"
     volumes:
       - ../home-crew-service-discovery:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - service_discovery_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5005:5005"
+    ports: !override
+      - "127.0.0.1:8761:8761"
+      - "127.0.0.1:5005:5005"
+    # service-discovery and config-server gate every other service through
+    # `depends_on: service_healthy`, and a cold Maven build does not fit in the
+    # production start_period - they would be marked unhealthy and the other
+    # ten would never start. service-discovery is the first thing to build on a
+    # machine whose Maven cache is still empty, so it gets the longer budget; a
+    # first probe that passes ends the start period early anyway. Only these
+    # two fields are overridden; the probe, interval and timeout are the base
+    # file's.
     healthcheck:
-      start_period: 240s
+      start_period: 600s
       retries: 40
 
   config-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8888"
     volumes:
       - ../home-crew-config-server:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - config_server_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5006:5006"
+    ports: !override
+      - "127.0.0.1:8888:8888"
+      - "127.0.0.1:5006:5005"
     healthcheck:
       start_period: 240s
       retries: 40
 
   api-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8080"
     volumes:
       - ../home-crew-api-gateway:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - api_gateway_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5007:5007"
+    ports: !override
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:5007:5005"
 
   auth-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8082"
     volumes:
       - ../home-crew-auth-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - auth_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5008:5008"
+    ports: !override
+      - "127.0.0.1:8082:8082"
+      - "127.0.0.1:5008:5005"
 
   user-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8081"
     volumes:
       - ../home-crew-user-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - user_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5009"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5009:5009"
+    ports: !override
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:5009:5005"
 
   admin-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8083"
     volumes:
       - ../home-crew-admin-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - admin_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5010:5010"
+    ports: !override
+      - "127.0.0.1:8083:8083"
+      - "127.0.0.1:5010:5005"
 
   booking-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8084"
     volumes:
       - ../home-crew-booking-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - booking_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5011:5011"
+    ports: !override
+      - "127.0.0.1:8084:8084"
+      - "127.0.0.1:5011:5005"
 
   worker-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8085"
     volumes:
       - ../home-crew-worker-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - worker_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5012"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5012:5012"
+    ports: !override
+      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:5012:5005"
 
   notification-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8086"
     volumes:
       - ../home-crew-notification-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - notification_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5013:5013"
+    ports: !override
+      - "127.0.0.1:8086:8086"
+      - "127.0.0.1:5013:5005"
 
   payment-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8087"
     volumes:
       - ../home-crew-payment-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - payment_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5014"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5014:5014"
+    ports: !override
+      - "127.0.0.1:8087:8087"
+      - "127.0.0.1:5014:5005"
 
   xp-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8088"
     volumes:
       - ../home-crew-xp-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - xp_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5015"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5015:5015"
+    ports: !override
+      - "127.0.0.1:8088:8088"
+      - "127.0.0.1:5015:5005"
 
   assignment-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    image: homecrew-dev-runtime:jdk25
-    pull_policy: never
-    entrypoint: ["/bin/sh", "/dev-reload.sh"]
-    working_dir: /app
-    mem_limit: ${DEV_SERVICE_MEM:-1g}
+    <<: *dev-java
+    environment:
+      <<: *dev-java-env
+      DEV_APP_PORT: "8089"
     volumes:
       - ../home-crew-assignment-service:/app
-      # Container-local target/ - see OWN target/ PER CONTAINER above.
       - assignment_service_target:/app/target
-      - ${HOME}/.m2:/root/.m2
+      - maven_repo:/root/.m2
       - ./dev-reload.sh:/dev-reload.sh:ro
-    environment:
-      # Emptied, not tuned. The production value is -Xmx128m and
-      # JAVA_TOOL_OPTIONS applies to EVERY JVM in the container, so it would
-      # cap Maven at 128m too and make the compile loop crawl.
-      JAVA_TOOL_OPTIONS: ""
-      MAVEN_OPTS: "-Xmx256m"
-      # Only the forked application JVM gets the debug agent. In
-      # JAVA_TOOL_OPTIONS, Maven and every compile-loop JVM would try to bind
-      # this port as well, every two seconds.
-      DEV_JVM_ARGS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5016"
-      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 2s
-      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 1s
-      # Restart only when dev-reload.sh touches this file after a compile that
-      # succeeded, not on the class files javac writes along the way.
-      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: .reloadtrigger
-      # Passed through explicitly. .env drives compose SUBSTITUTION, not
-      # container environment, so dev-reload.sh would never see it otherwise -
-      # it would silently fall back to its own default and the knob in .env
-      # would look broken rather than absent.
-      DEV_RELOAD_INTERVAL: ${DEV_RELOAD_INTERVAL:-2}
-    ports:
-      - "5016:5016"
+    ports: !override
+      - "127.0.0.1:8089:8089"
+      - "127.0.0.1:5016:5005"
 
   # The one service that is not a JVM. Angular's dev server does its own
   # watching and rebuilding, so there is no compile loop to bolt on - see
@@ -510,16 +345,35 @@ services:
     volumes:
       - ../home-crew-webapp:/app
       # node_modules in a named volume, NOT on the bind mount. Installing onto
-      # the host directory would be slow over a macOS bind mount, would leave a
-      # platform-specific tree in your checkout, and would collide with any
-      # install you run outside the container.
+      # the host directory would be slow over a macOS or Windows bind mount,
+      # would leave a platform-specific tree in your checkout, and would
+      # collide with any install you run outside the container.
       - webapp_node_modules:/app/node_modules
+      # The Angular build cache, for the same reason: thousands of small writes
+      # that are cheap on the volume and slow over the bind mount. The checkout
+      # sees only an empty .angular/ mount point, which git ignores (on native
+      # Linux or inside WSL it is owned by root).
+      - webapp_angular_cache:/app/.angular
       - ./webapp-dev.sh:/webapp-dev.sh:ro
     environment:
       WEBAPP_POLL_INTERVAL: ${WEBAPP_POLL_INTERVAL:-2000}
+    ports: !override
+      - "127.0.0.1:4200:80"
+    # The base file starts webapp after api-gateway, which in turn waits for
+    # config-server and service-discovery to be healthy - so the dev server
+    # used to sit idle through the entire Java cold start. It calls nothing
+    # server-side, only the browser does, so here it starts at once, and
+    # `./dev up webapp` starts the frontend alone.
+    depends_on: !reset {}
 
 volumes:
+  # Created by ./dev and .\dev.ps1 before every `up` - see ONE MAVEN REPOSITORY
+  # above.
+  maven_repo:
+    name: homecrew-maven-repo
+    external: true
   webapp_node_modules:
+  webapp_angular_cache:
   service_discovery_target:
   config_server_target:
   api_gateway_target:

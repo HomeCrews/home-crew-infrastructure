@@ -13,3 +13,6 @@
 
 # Local state
 *.log
+
+# Output of the verification harness (test/run.ps1, test/run.sh).
+/test/results/

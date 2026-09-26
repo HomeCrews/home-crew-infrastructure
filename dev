@@ -1,37 +1,58 @@
 #!/bin/sh
 # HomeCrew, running locally, in watch mode.
 #
-#   ./dev up             start everything, hot reloading
-#   ./dev down           stop everything (the volumes are kept)
-#   ./dev logs [svc...]  follow logs
+#   ./dev up [svc...]      start everything, or just these services and what
+#                          they depend on, hot reloading
+#   ./dev down [flags...]  stop everything; the volumes are kept unless you
+#                          pass -v (the Maven cache is kept even then)
+#   ./dev logs [args...]   follow logs
 #
 # There is no non-watch mode. Every service runs from its sibling checkout at
 # ../home-crew-<service>, compiled inside its own container, so saving a .java
 # file restarts that one service and nothing else. No image is rebuilt in the
-# loop and nothing is pulled from Docker Hub.
+# loop and no homecrew image is pulled from Docker Hub.
 #
-# Your machine needs docker and a .env. It does NOT need a JDK or Maven - the
-# containers do the compiling.
+# Your machine needs docker (with Compose 2.24.4 or later) and a .env. It does
+# NOT need a JDK or Maven - the containers do the compiling.
 #
-# To wipe the databases and Kafka's log, which ./dev deliberately will not do
-# for you:
+# To wipe the databases, Kafka's log and the build caches, which ./dev will not
+# do unless you ask:
 #
-#     docker compose down -v
+#     ./dev down -v
+#
+# On Windows use dev.ps1, which mirrors this script: same commands, same
+# guards, same messages.
 
 set -eu
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
 SIBLINGS=$(cd "$ROOT/.." && pwd)
 
-FILES="-f $ROOT/docker-compose.yml -f $ROOT/compose.dev.yml"
+# Relative on purpose, and only ever used after `cd "$ROOT"`: an absolute path
+# split into words broke every command for a checkout under a directory with a
+# space in its name.
+FILES="-f docker-compose.yml -f compose.dev.yml"
+
+MAVEN_VOLUME=homecrew-maven-repo
+COMPOSE_MIN=2.24.4
 
 SERVICES="service-discovery config-server api-gateway auth-service
 user-service admin-service booking-service worker-service
 notification-service payment-service xp-service assignment-service webapp"
 
+# Git Bash on Windows rewrites anything that looks like a POSIX path in the
+# arguments of a native program - /root/.m2 would reach docker as
+# C:/Program Files/Git/root/.m2. Harmless everywhere else. dev.ps1 has no
+# counterpart because PowerShell does no such thing.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
 die() {
     printf '%s\n' "$@" >&2
     exit 1
+}
+
+warn() {
+    printf 'WARNING: %s\n' "$@" >&2
 }
 
 info() {
@@ -40,6 +61,18 @@ info() {
     else
         printf '==> %s\n' "$1"
     fi
+}
+
+# 0 = has a CR, 1 = none. A file grep cannot read is an error, not "clean":
+# failing open here would start twelve containers on a script nobody checked.
+has_cr() {
+    _rc=0
+    grep -q "$(printf '\r')" "$1" 2>/dev/null || _rc=$?
+    case $_rc in
+        0) return 0 ;;
+        1) return 1 ;;
+        *) die "cannot read $1 to check its line endings" ;;
+    esac
 }
 
 # docker compose reads .env for variable SUBSTITUTION, and POSTGRES_PASSWORD is
@@ -54,6 +87,24 @@ require_env() {
         "Then fill in CONFIG_GIT_USERNAME and CONFIG_GIT_TOKEN: home-crew-config" \
         "is private, and config-server cannot clone it without a token. The" \
         "POSTGRES_* defaults in .env.example are fine as they are."
+
+    # A .env written by Windows PowerShell 5.1 (`>`, Out-File) is UTF-16, which
+    # compose reads as garbage with no useful error. It shows up as NUL bytes.
+    # LC_ALL=C: byte-wise. macOS tr in a UTF-8 locale stops at the first byte
+    # that is not valid UTF-8 - which would make any such .env look UTF-16.
+    if ! LC_ALL=C tr -d '\000' <"$ROOT/.env" | cmp -s - "$ROOT/.env"; then
+        die "$ROOT/.env is not plain text - it looks UTF-16, which is what Windows" \
+            "PowerShell 5.1 writes with > or Out-File. Save it again as UTF-8, or:" \
+            "" \
+            "    Get-Content .env | Set-Content -Encoding ascii .env.new; Move-Item -Force .env.new .env"
+    fi
+
+    # The environment beats .env, so a SPRING_PROFILES_ACTIVE left in your
+    # shell or your Windows user variables silently replaces `container`.
+    if [ -n "${SPRING_PROFILES_ACTIVE:-}" ]; then
+        warn "SPRING_PROFILES_ACTIVE=$SPRING_PROFILES_ACTIVE is set in your environment and overrides" \
+             "the stack's default profile (container). Unset it unless you mean it."
+    fi
 }
 
 require_docker() {
@@ -63,17 +114,72 @@ require_docker() {
         "docker is installed but the daemon is not responding. Start Docker and retry."
 }
 
+# compose.dev.yml uses !override and !reset, which Compose understands from
+# 2.24.4. Older versions reject the file with a YAML error that mentions
+# neither versions nor tags. Docker Desktop reports versions like
+# 2.39.1-desktop.1, sometimes with a leading v: only the three leading numbers
+# count.
+compose_version_ok() {
+    printf '%s\n' "$1" | awk -v min="$COMPOSE_MIN" '
+        { v = $0; sub(/^v/, "", v) }
+        v !~ /^[0-9]+\.[0-9]+\.[0-9]+/ { exit 1 }
+        {
+            split(v, a, /[^0-9]+/); split(min, b, ".")
+            for (i = 1; i <= 3; i++) {
+                if (a[i] + 0 > b[i] + 0) exit 0
+                if (a[i] + 0 < b[i] + 0) exit 1
+            }
+            exit 0
+        }
+        END { if (NR == 0) exit 1 }'
+}
+
+require_compose() {
+    _v=$(docker compose version --short 2>/dev/null) || _v=""
+    compose_version_ok "$_v" || die \
+        "Docker Compose $COMPOSE_MIN or later is required; this is '${_v:-unknown}'." \
+        "compose.dev.yml uses !override and !reset, which older versions reject." \
+        "Update Docker Desktop, or the docker-compose-plugin package."
+}
+
+# A script checked out with Windows line endings breaks INSIDE the Linux
+# containers - `set -eu\r` - so twelve containers would crash-loop on it. Git
+# normally prevents it (.gitattributes forces LF), but a clone made before
+# that rule, or an editor that rewrites line endings, still produces one.
+require_lf() {
+    # Collected as positional parameters, one per file, so that a path with a
+    # space in it stays one line of the message.
+    set --
+    for _f in "$ROOT/dev-reload.sh" "$ROOT/webapp-dev.sh"; do
+        if has_cr "$_f"; then set -- "$@" "    $_f"; fi
+    done
+    for _svc in $SERVICES; do
+        _f="$SIBLINGS/home-crew-$_svc/mvnw"
+        if [ -f "$_f" ] && has_cr "$_f"; then set -- "$@" "    $_f"; fi
+    done
+    [ $# -eq 0 ] || die \
+        "These files have Windows (CRLF) line endings, and the containers cannot run them:" \
+        "" \
+        "$@" \
+        "" \
+        "Check each out again - git writes LF for them:" \
+        "" \
+        "    rm <file> && git -C <its repository> checkout -- <file>"
+}
+
 # Every service is a bind mount of a sibling repository. A missing one would not
 # fail loudly: Docker would happily create an empty directory and the container
 # would die on a missing pom, twelve lines deep in a log. Check first.
 require_siblings() {
     missing=""
+    set --
     for svc in $SERVICES; do
         # pom.xml for the twelve Java services, package.json for webapp -
         # checking only for the directory would pass on an empty clone.
         if [ ! -f "$SIBLINGS/home-crew-$svc/pom.xml" ] \
            && [ ! -f "$SIBLINGS/home-crew-$svc/package.json" ]; then
             missing="$missing home-crew-$svc"
+            set -- "$@" "    git clone git@github.com:HomeCrews/home-crew-$svc.git"
         fi
     done
     [ -z "$missing" ] || die \
@@ -82,58 +188,88 @@ require_siblings() {
         "Every service is bind-mounted from a sibling directory, so they all have" \
         "to be cloned next to this one:" \
         "" \
-        "    cd $SIBLINGS" \
-        "    for r in$missing; do git clone git@github.com:HomeCrews/\$r.git; done"
+        "    cd \"$SIBLINGS\"" \
+        "$@"
 }
 
 # shellcheck disable=SC2086  # $FILES is deliberately split
 compose() {
-    require_env
-    require_docker
     ( cd "$ROOT" && docker compose $FILES "$@" )
 }
 
+preflight() {
+    require_env
+    require_docker
+    require_compose
+}
+
 cmd_up() {
+    preflight
     require_siblings
-    info "starting every service in watch mode"
+    require_lf
+
+    # Validated before anything starts, so a typo in either file is one clear
+    # compose error here rather than twelve containers half-created.
+    compose config --quiet
+
+    # compose.dev.yml declares the Maven cache external, so that `down -v`
+    # cannot take it - which also means compose will not create it. This does,
+    # and does nothing if it already exists.
+    docker volume create "$MAVEN_VOLUME" >/dev/null
+
+    if [ $# -gt 0 ]; then
+        info "starting $* and what it depends on, in watch mode"
+    else
+        info "starting every service in watch mode"
+    fi
 
     # --build so the shared dev runtime image exists. It is one FROM and an
     # apt-get, so rebuilding it is cheap and always doing it means a change to
     # Dockerfile.dev cannot be silently ignored.
     #
-    # --wait with no --wait-timeout, as in dev.ps1: the healthchecks already
-    # bound it, and a shorter timeout leaves every dependent Created and never
-    # started. See the note there.
-    compose up -d --build --wait
+    # --wait with no --wait-timeout: the healthchecks already bound it, and a
+    # shorter timeout leaves every dependent Created and never started.
+    compose up -d --build --wait "$@"
 
     cat <<'EOF'
 
-Everything is up. The FIRST start is slow: each container resolves its
-dependency tree and compiles from cold. Watch it happen with
+The containers are up. The Java services are still compiling and starting
+behind them: on the FIRST start each one resolves its dependencies into the
+shared Maven cache and compiles from cold, which takes minutes. Watch it with
 
     ./dev logs
 
-After that, save a .java file. The log for that service shows "change
-detected, recompiling", then DevTools restarting the context. No image is
-rebuilt and no other service is touched.
+A service is serving once its log shows "[dev-reload] app-ready". After that,
+save a .java file: the log shows "[dev-reload] source-changed", then
+"trigger-touched", and DevTools restarts the context. A pom.xml change shows
+"build-changed" and starts a new JVM. No image is rebuilt and no other service
+is touched.
 
-    webapp           http://localhost:4200
-    gateway          http://localhost:8080
-    eureka           http://localhost:8761
-    config-server    http://localhost:8888/actuator/health
-    served config    http://localhost:8888/userservice/container
+    webapp           http://127.0.0.1:4200
+    gateway          http://127.0.0.1:8080
+    eureka           http://127.0.0.1:8761
+    config-server    http://127.0.0.1:8888/actuator/health
 
-Debuggers are on 5005 upwards, in the order the services are listed in
-compose.dev.yml. Attached debuggers survive a DevTools restart.
+Everything listens on 127.0.0.1 only. Attach a debugger to 127.0.0.1:
+
+    service-discovery 5005    config-server 5006    api-gateway 5007
+    auth-service      5008    user-service  5009    admin-service 5010
+    booking-service   5011    worker-service 5012   notification-service 5013
+    payment-service   5014    xp-service    5015    assignment-service 5016
 EOF
 }
 
 cmd_down() {
-    info "stopping everything, keeping the volumes"
-    compose down
+    preflight
+    case " $* " in
+        *" -v "*|*" --volumes "*) info "stopping everything and emptying the volumes (the Maven cache is kept)" ;;
+        *) info "stopping everything, keeping the volumes" ;;
+    esac
+    compose down "$@"
 }
 
 cmd_logs() {
+    preflight
     compose logs -f --tail 100 "$@"
 }
 
@@ -141,8 +277,8 @@ cmd=${1:-help}
 [ $# -gt 0 ] && shift
 
 case "$cmd" in
-    up)   cmd_up ;;
-    down) cmd_down ;;
+    up)   cmd_up "$@" ;;
+    down) cmd_down "$@" ;;
     logs) cmd_logs "$@" ;;
     help|-h|--help)
         # Print the header comment and stop at the first line that is not one,
