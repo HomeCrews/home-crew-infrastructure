@@ -1243,7 +1243,7 @@ function Reload-CheckBootSave {
     $announced = Reload-AnnouncedPid $p
     if (-not $R.Pid1) { $R.Problems.Add('no application JVM in jcmd -l afterwards') }
     elseif ($R.Pid1 -eq $R.Pid0) { $R.Problems.Add("the pid is still $($R.Pid0): the pom.xml edit did not replace the JVM") }
-    elseif ($announced -and $announced -ne $R.Pid1) { $R.Problems.Add("jcmd -l shows pid $($R.Pid1), but app-started announced $announced: the DevTools restart should have kept that JVM") }
+    elseif ($announced -and $announced -ne $R.Pid1) { $R.Problems.Add("jcmd -l shows pid $($R.Pid1), but app-started announced ${announced}: the DevTools restart should have kept that JVM") }
 }
 
 # ---------------------------------------------------------------------------

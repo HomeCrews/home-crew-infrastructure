@@ -415,7 +415,20 @@ function Cli-CheckFunctionMap {
 
 function Cli-Signature {
     param($R)
-    return ("exit=" + $R.Exit + "`n" + (@($R.CallsCwd) -join "`n") + "`n==>`n" + (@($R.Info) -join "`n"))
+    return ("exit=" + $R.Exit + "`n" + (@($R.CallsCwd | ForEach-Object { Cli-CallKey $_ }) -join "`n") + "`n==>`n" + (@($R.Info) -join "`n"))
+}
+
+# One "<cwd><TAB><argv>" line as parity compares it. The working directory is
+# part of a call's behaviour only where docker reads files relative to it -
+# compose's -f files, and .env - so for every other call it is left out.
+# Windows PowerShell 5.1 started in a directory whose name holds [ or ] reads
+# that name as a wildcard, cannot set its location there, and runs from
+# $PSHOME: harmless for docker info, and no difference in what dev.ps1 does.
+function Cli-CallKey {
+    param([string] $Line)
+    $p = $Line -split "`t", 2
+    if ($p.Count -lt 2 -or $p[1] -match '^compose\b.* -f ') { return $Line }
+    return "*`t" + $p[1]
 }
 
 function Cli-ShortSignature {

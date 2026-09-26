@@ -45,7 +45,6 @@ fi
 P=A-SH-
 [ -n "$WHERE" ] && P="A-SH-$WHERE-"
 
-CR=$(printf '\r')
 NL='
 '
 
@@ -114,14 +113,20 @@ for f in $FILES; do
     # A CR anywhere breaks these inside the Linux containers (set -eu\r), and
     # in Git Bash. .gitattributes forces LF for all of them; a CR means an old
     # clone from before that rule, or an editor that rewrote the endings.
-    # grep -c: 0 = found, 1 = not found, anything else = it could not look,
-    # which must not read as "no CR".
-    _n=$(LC_ALL=C grep -c "$CR" "$f" 2>/dev/null)
-    case $? in
-        0) hc_fail "${P}cr-$f" "$f has CR bytes on $_n line(s) (CRLF line endings). Tracked: rm $f && git checkout -- $f. Not committed yet: convert it to LF in the editor" ;;
-        1) hc_pass "${P}cr-$f" "$f: LF only" ;;
-        *) hc_fail "${P}cr-$f" "$f: could not be checked for CR bytes (grep failed)" ;;
-    esac
+    # Counted with tr, not grep: GNU grep on Windows - Git Bash's included -
+    # drops the CRs of a file it takes for text before it matches, so a grep
+    # for one never finds it there. A file that cannot be read must not read
+    # as "no CR".
+    if [ ! -r "$f" ]; then
+        hc_fail "${P}cr-$f" "$f: could not be checked for CR bytes (not readable)"
+    else
+        _n=$(LC_ALL=C tr -cd '\015' <"$f" | wc -c | tr -d ' ')
+        if [ "${_n:-0}" -gt 0 ]; then
+            hc_fail "${P}cr-$f" "$f has $_n CR byte(s) (CRLF line endings). Tracked: rm $f && git checkout -- $f. Not committed yet: convert it to LF in the editor"
+        else
+            hc_pass "${P}cr-$f" "$f: LF only"
+        fi
+    fi
 
     for s in $SHELLS; do
         _cmd=$s
