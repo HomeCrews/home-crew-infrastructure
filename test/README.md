@@ -351,6 +351,8 @@ does not download everything again; the run removes it at the end.
 - **D-LOCK-\*.**
   - The resolver logged file-lock with file-gav.
   - `jcmd` shows `deleteLockFiles=false` on the mvnd daemon.
+  - **D-MVND-OPTS:** the daemon registered in its own container's
+    `/tmp/mvnd`, not on the shared volume, and its heap is capped at 320 MB.
   - A held lock blocks a build.
   - The reverse probe sees Maven holding the very file it created.
 - **H-VOL-02 and D-WARM.** The test project's `down -v` removes its own
@@ -379,7 +381,9 @@ The two live JVMs are then compared. The facts come from `jcmd` and
 - the system properties and the environment, minus the volatile set (learned
   from two NEW launches, **E-VOLATILE**) and `parity/whitelist.txt`;
 - the working directory `/app`, the same exe, stdout equal to stderr, and no
-  Maven JVM left;
+  Maven client JVM left. The idle mvnd build daemon may stay beside the
+  application; it runs the same classworlds launcher as Maven, and is told
+  apart by its command line;
 - JDWP 5005 owned by the application pid;
 - the logs: the same profile, the same `Located environment` and the same
   port.

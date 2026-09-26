@@ -439,6 +439,7 @@ echo "$seq" >"$SM_H/log/mvn.seq"
 {
     for a in "$@"; do printf 'arg:%s\n' "$a"; done
     printf 'env:MAVEN_OPTS=%s\n' "${MAVEN_OPTS:-}"
+    printf 'env:JDK_JAVA_OPTIONS=%s\n' "${JDK_JAVA_OPTIONS:-}"
     printf 'env:TMPDIR=%s\n' "${TMPDIR:-}"
     printf 'cwd:%s\n' "$(pwd -P)"
 } >"$SM_H/log/mvn-args.$seq"
@@ -811,9 +812,10 @@ sm_check_maven_flags() {
     if [ "$SM_COMPILER" = mvnd ]; then
         grep -qxF -- "arg:-Dmvnd.daemonStorage=/tmp/mvnd" "$_mf" ||
             sm_fail "mvnd was not given -Dmvnd.daemonStorage=/tmp/mvnd"
-        # One argument, whatever else it carries: mvnd splits jvmArgs itself.
-        grep -q '^arg:-Dmvnd\.jvmArgs=\(.* \)\{0,1\}-Daether\.named\.file-lock\.deleteLockFiles=false\( .*\)\{0,1\}$' "$_mf" ||
-            sm_fail "mvnd was not given -Daether.named.file-lock.deleteLockFiles=false inside one -Dmvnd.jvmArgs= argument"
+        # In the environment the daemon inherits: -Dmvnd.jvmArgs never got it
+        # to the daemon (most likely lost to the project's .mvn/jvm.config).
+        grep -q '^env:JDK_JAVA_OPTIONS=\(.* \)\{0,1\}-Daether\.named\.file-lock\.deleteLockFiles=false\( .*\)\{0,1\}$' "$_mf" ||
+            sm_fail "mvnd ran without -Daether.named.file-lock.deleteLockFiles=false in JDK_JAVA_OPTIONS, which is how it reaches the daemon's JVM"
     else
         grep -q '^env:MAVEN_OPTS=.*-Daether\.named\.file-lock\.deleteLockFiles=false' "$_mf" ||
             sm_fail "./mvnw ran without -Daether.named.file-lock.deleteLockFiles=false in MAVEN_OPTS"

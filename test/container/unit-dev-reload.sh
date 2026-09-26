@@ -1814,6 +1814,7 @@ mvn_load() {
     cat >"$u_d/bin/mvnd" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$@" >"$HC_REC"
+printf 'JDK_JAVA_OPTIONS=%s\n' "${JDK_JAVA_OPTIONS:-}" >"$HC_REC.mvnd-env"
 echo x >>"$HC_REC.calls"
 exit "${HC_MVND_EXIT:-0}"
 EOF
@@ -1879,19 +1880,22 @@ mvn_mvnd() {
         grep -qxF -- "$u_f" "$HC_REC" || u_miss="$u_miss $u_f"
     done
     # The heap cap has to be mvnd's own option: mvnd appends its default -Xmx
-    # AFTER jvmArgs, and the last -Xmx wins, so one inside jvmArgs is dead.
+    # after the daemon's other JVM options, and the last -Xmx wins.
     u_heap=$(grep -- '^-Dmvnd.maxHeapSize=' "$HC_REC" | head -n 1) || u_heap=""
-    u_jvm=$(grep -c -- '^-Dmvnd.jvmArgs=' "$HC_REC") || u_jvm=0
-    u_jvmarg=$(grep -- '^-Dmvnd.jvmArgs=' "$HC_REC" | head -n 1) || u_jvmarg=""
+    # The lock property travels in the daemon's environment, JDK_JAVA_OPTIONS
+    # (-Dmvnd.jvmArgs never got it to the daemon) - and only there: left in
+    # this shell's environment, the application's java would pick it up too.
+    u_env=$(sed -n 's/^JDK_JAVA_OPTIONS=//p' "$HC_REC.mvnd-env" 2>/dev/null) || u_env=""
     u_tail=$(tail -n 4 "$HC_REC" | tr '\n' ' ')
-    if [ "$u_rc" -eq 0 ] && [ -z "$u_miss" ] && [ -n "$u_heap" ] && [ "$u_jvm" = 1 ] &&
-       case " ${u_jvmarg#-Dmvnd.jvmArgs=} " in *" $LOCK_PROP "*) true ;; *) false ;; esac &&
-       case $u_jvmarg in *-Xmx*) false ;; *) true ;; esac &&
+    if [ "$u_rc" -eq 0 ] && [ -z "$u_miss" ] && [ -n "$u_heap" ] &&
+       case " $u_env " in *" $LOCK_PROP "*) true ;; *) false ;; esac &&
+       case $u_env in *-Xmx*) false ;; *) true ;; esac &&
+       [ -z "${JDK_JAVA_OPTIONS:-}" ] &&
        grep -qxF -- -q "$HC_REC" &&
        [ "$u_tail" = 'compile dependency:build-classpath -Dmdep.outputFile=/x/cp.txt -DincludeScope=runtime ' ]; then
-        hc_pass "$U_ID" "mvnd gets its own daemonStorage and idleTimeout, $u_heap (not an -Xmx in jvmArgs), ONE jvmArgs word carrying $LOCK_PROP, and every required flag"
+        hc_pass "$U_ID" "mvnd gets its own daemonStorage and idleTimeout, $u_heap, $LOCK_PROP in JDK_JAVA_OPTIONS for the daemon's JVM (and not in this shell's environment, which the application inherits), and every required flag"
     else
-        hc_fail "$U_ID" "mvnd: status $u_rc, missing:${u_miss:- none}, heap option '${u_heap:-none}', $u_jvm jvmArgs word(s) '$u_jvmarg', last four [$u_tail]"
+        hc_fail "$U_ID" "mvnd: status $u_rc, missing:${u_miss:- none}, heap option '${u_heap:-none}', JDK_JAVA_OPTIONS for mvnd '$u_env', left in this shell '${JDK_JAVA_OPTIONS:-}', last four [$u_tail]"
     fi
     return 0
 }

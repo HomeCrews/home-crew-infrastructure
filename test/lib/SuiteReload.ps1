@@ -239,12 +239,15 @@ exit 0
 # $1: the package directory (com/homecrew/<svc>); $2, optional: one resource
 # the suite may have left behind. Both trees: the compiled classes, and
 # dev-reload.sh's last-good snapshot, which a later failed compile copies back
-# over them.
+# over them. Each removal says how many files went with it.
 $script:ReloadShPurge = @'
 for base in /app/target/classes /app/target/.dev-reload/good/classes; do
     d="$base/$1/devprobe"
-    if [ -e "$d" ]; then rm -rf "$d" && echo "removed $d"; fi
-    if [ -n "${2:-}" ] && [ -e "$base/$2" ]; then rm -f "$base/$2" && echo "removed $base/$2"; fi
+    if [ -e "$d" ]; then
+        n=$(find "$d" -type f | wc -l | tr -d ' ')
+        rm -rf "$d" && echo "removed $d $n"
+    fi
+    if [ -n "${2:-}" ] && [ -e "$base/$2" ]; then rm -f "$base/$2" && echo "removed $base/$2 1"; fi
     if [ -e "$d" ]; then echo "left $d"; fi
 done
 exit 0
@@ -1754,6 +1757,22 @@ function Reload-Sockets {
     return [pscustomobject]@{ Ok = ($r.ExitCode -eq 0); Items = $list.ToArray(); Text = [string]$r.StdOut }
 }
 
+# HC-PROBE markers the RUNNING context printed while it started: those between
+# its last "Started" line and the DevTools restart or JVM launch before it.
+# $null when the tail of the log holds no Started line to go by.
+function Reload-RunningProbes {
+    param([Parameter(Mandatory)] $Ctx)
+    $p = Reload-ParseLog -Ctx $Ctx -Text (Reload-Tail $Ctx 400)
+    $o = @($p.Order)
+    $starts = @($o | Where-Object { $_.Kind -eq 'Started' })
+    if ($starts.Count -eq 0) { return $null }
+    $iS = $starts[$starts.Count - 1].I
+    $iB = -1
+    foreach ($x in $o) { if ($x.I -lt $iS -and $x.Kind -in @('Restarting', 'app-started')) { $iB = $x.I } }
+    # The comma: an empty array returned bare would reach the caller as $null.
+    return , @($p.Probes | Where-Object { $_.I -gt $iB -and $_.I -lt $iS } | ForEach-Object { "HC-PROBE $($_.Name) $($_.Version)" })
+}
+
 function Reload-PurgeProbes {
     param([Parameter(Mandatory)] $Ctx, [string] $Extra = '')
     $sa = @($Ctx.PkgPath)
@@ -1761,11 +1780,18 @@ function Reload-PurgeProbes {
     $r = Reload-ExecScript -Container $Ctx.Container -Script $script:ReloadShPurge -ScriptArgs $sa -TimeoutSec 60
     $removed = @()
     $left = @()
+    # Files taken out of /app/target/classes, which DevTools watches: only
+    # those make a trigger touch restart the context.
+    [int] $classesFiles = 0
     foreach ($l in ($r.StdOut -split "`r?`n")) {
-        if ($l.StartsWith('removed ')) { $removed += $l.Substring(8).Trim() }
+        $m = [regex]::Match($l, '^removed (\S+) (\d+)$')
+        if ($m.Success) {
+            $removed += $m.Groups[1].Value
+            if ($m.Groups[1].Value.StartsWith('/app/target/classes/')) { $classesFiles += [int]$m.Groups[2].Value }
+        }
         elseif ($l.StartsWith('left ')) { $left += $l.Substring(5).Trim() }
     }
-    return [pscustomobject]@{ Ok = ($r.ExitCode -eq 0); Removed = $removed; Left = $left }
+    return [pscustomobject]@{ Ok = ($r.ExitCode -eq 0); Removed = $removed; Left = $left; ClassesFiles = $classesFiles }
 }
 
 # A classpath resolved from scratch, in a one-off container of the live
@@ -2231,39 +2257,56 @@ function Reload-RestoreRepo {
     if ((Reload-ContainerState $Ctx.Container) -eq 'running') {
         $build = @($changed | Where-Object { Reload-IsBuildFile $Ctx $_ }).Count -gt 0
         $src = @($changed | Where-Object { Reload-IsSrcMain $Ctx $_ }).Count -gt 0
+        # A reload comes from the restore itself when it changed a file
+        # dev-reload.sh watches. Otherwise from the trigger - but DevTools
+        # leaves the trigger file itself out of the changes it restarts on, so
+        # touching it restarts nothing unless the purge took files out of
+        # target/classes. With neither, the context has not seen a probe since
+        # its last clean restart, and there is nothing to reload.
         if ($Quick) {
             $purge = Reload-PurgeProbes -Ctx $Ctx -Extra $extra
-            if (-not ($build -or $src)) { $null = Reload-TouchTrigger $Ctx }
+            if (-not ($build -or $src) -and $purge.ClassesFiles -gt 0) { $null = Reload-TouchTrigger $Ctx }
             $warnings.Add("the run was interrupted, so the reload after the restore was not waited for - if $($Ctx.Container) still prints HC-PROBE lines, purge and touch by hand")
         }
         else {
             $t0 = Reload-Now $Ctx
-            $null = Reload-PurgeProbes -Ctx $Ctx -Extra $extra
-            # The restore itself causes the reload; when it changed nothing
-            # dev-reload.sh watches, the trigger is touched to get one.
-            if (-not ($build -or $src)) { $null = Reload-TouchTrigger $Ctx }
-            $to = $script:ReloadSourceSec
-            $fail = $script:ReloadSourceFailOn
-            if ($build) { $to = $script:ReloadBuildSec; $fail = $script:ReloadBuildFailOn }
-            $w = Reload-Watch -Ctx $Ctx -Since $t0 -Started 1 -TimeoutSec $to -FailOn $fail
-            $evidence.Add((Reload-SaveWindow -Ctx $Ctx -Name $Id -W $w))
-            # Again: a snapshot taken while the first purge ran would hold them.
-            $purge = Reload-PurgeProbes -Ctx $Ctx -Extra $extra
-            if (-not $w.Ok) {
-                $evidence.Add((Save-Evidence -Suite 'reload' -Name "$Id-last200.log" -Content (Reload-Tail $Ctx 200)))
-                $problems.Add("no reload after the restore within $($w.Secs)s ($(Reload-Summary $w)), so the running context may still hold probe classes")
+            $first = Reload-PurgeProbes -Ctx $Ctx -Extra $extra
+            $touched = $false
+            if (-not ($build -or $src) -and $first.ClassesFiles -gt 0) { $null = Reload-TouchTrigger $Ctx; $touched = $true }
+            if (-not ($build -or $src -or $touched)) {
+                $purge = $first
+                $live = Reload-RunningProbes $Ctx
+                if ($null -eq $live) { $warnings.Add('nothing to reload - the restore changed no watched file and no probe class was left in target/classes - but the running context''s last start is not in the log to confirm it is clean') }
+                elseif ($live.Count) { $problems.Add("the running context loaded probe classes at its last start ($($live -join ', ')), and there is no class left to purge that a trigger could restart it on") }
+                else { $notes.Add('nothing to reload: the restore changed no watched file, no probe class was left in target/classes, and the running context started without one') }
             }
-            elseif (@($w.P.Probes).Count) {
-                # Stale classes were live in that reload; they are gone from disk
-                # now, so one more must come up without them.
-                $t1 = Reload-Now $Ctx
-                $null = Reload-TouchTrigger $Ctx
-                $w2 = Reload-Watch -Ctx $Ctx -Since $t1 -Started 1 -TimeoutSec $script:ReloadSourceSec -FailOn $script:ReloadSourceFailOn
-                $evidence.Add((Reload-SaveWindow -Ctx $Ctx -Name "$Id-again" -W $w2))
-                if ($w2.Ok -and @($w2.P.Probes).Count -eq 0) { $notes.Add('the reload after the restore still printed a probe marker (stale classes in the volume); purged, and the next reload was clean') }
-                else { $problems.Add('probe markers are still printed after the restore and a purge: ' + (@($w2.P.Probes | ForEach-Object { "HC-PROBE $($_.Name) $($_.Version)" }) -join ', ')) }
+            else {
+                $to = $script:ReloadSourceSec
+                $fail = $script:ReloadSourceFailOn
+                if ($build) { $to = $script:ReloadBuildSec; $fail = $script:ReloadBuildFailOn }
+                $w = Reload-Watch -Ctx $Ctx -Since $t0 -Started 1 -TimeoutSec $to -FailOn $fail
+                $evidence.Add((Reload-SaveWindow -Ctx $Ctx -Name $Id -W $w))
+                # Again: a snapshot taken while the first purge ran would hold them.
+                $purge = Reload-PurgeProbes -Ctx $Ctx -Extra $extra
+                if (-not $w.Ok) {
+                    $evidence.Add((Save-Evidence -Suite 'reload' -Name "$Id-last200.log" -Content (Reload-Tail $Ctx 200)))
+                    $problems.Add("no reload after the restore within $($w.Secs)s ($(Reload-Summary $w)), so the running context may still hold probe classes")
+                }
+                elseif (@($w.P.Probes).Count -and $purge.ClassesFiles -eq 0) {
+                    $problems.Add('the reload after the restore printed probe markers, yet no probe class was left in target/classes to purge: ' + (@($w.P.Probes | ForEach-Object { "HC-PROBE $($_.Name) $($_.Version)" }) -join ', '))
+                }
+                elseif (@($w.P.Probes).Count) {
+                    # Stale classes were live in that reload; they are gone from
+                    # disk now, which is the class change the trigger needs.
+                    $t1 = Reload-Now $Ctx
+                    $null = Reload-TouchTrigger $Ctx
+                    $w2 = Reload-Watch -Ctx $Ctx -Since $t1 -Started 1 -TimeoutSec $script:ReloadSourceSec -FailOn $script:ReloadSourceFailOn
+                    $evidence.Add((Reload-SaveWindow -Ctx $Ctx -Name "$Id-again" -W $w2))
+                    if ($w2.Ok -and @($w2.P.Probes).Count -eq 0) { $notes.Add('the reload after the restore still printed a probe marker (stale classes in the volume); purged, and the next reload was clean') }
+                    else { $problems.Add('probe markers are still printed after the restore and a purge: ' + (@($w2.P.Probes | ForEach-Object { "HC-PROBE $($_.Name) $($_.Version)" }) -join ', ')) }
+                }
+                else { $notes.Add("one clean reload afterwards ($(Reload-Summary $w))") }
             }
-            else { $notes.Add("one clean reload afterwards ($(Reload-Summary $w))") }
         }
         if (@($purge.Left).Count) { $problems.Add('probe classes are still in the target volume: ' + (@($purge.Left) -join ', ')) }
     }
@@ -2277,7 +2320,9 @@ function Reload-RestoreRepo {
     }
     else { $notes.Add('git status clean') }
 
-    if ($null -ne $GitBefore) {
+    # Non-empty, not non-null: a [string] parameter turns $null into '', and
+    # G-RESTORE leaves this check to G-GIT.
+    if ($GitBefore) {
         $after = Get-GitConfigHash $Ctx.Repo
         if ($after -ne $GitBefore) {
             $evidence.Add((Save-Evidence -Suite 'reload' -Name "$Id-git-config.txt" -Content ("before: $GitBefore`nafter:  $after`n")))
@@ -2317,7 +2362,7 @@ function Reload-ManualRestore {
         }
     }
     $cmds += "docker exec $($Ctx.Container) rm -rf /app/target/classes/$($Ctx.PkgPath)/devprobe /app/target/.dev-reload/good/classes/$($Ctx.PkgPath)/devprobe"
-    $cmds += "docker exec $($Ctx.Container) touch /app/target/classes/$($Ctx.Trigger)   (one DevTools restart without them)"
+    $cmds += "docker exec $($Ctx.Container) touch /app/target/classes/$($Ctx.Trigger)   (DevTools restarts without them - but only if the rm above removed a file)"
     return $cmds
 }
 

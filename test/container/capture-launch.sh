@@ -181,4 +181,18 @@ fi
 section jcmd_l
 printf '%s\n' "$JCMD_L"
 
+# And the command line of each of the others: mvnd 1.x starts its daemon
+# through plexus-classworlds, so jcmd -l names it
+# org.codehaus.plexus.classworlds.launcher.Launcher like any Maven JVM, and
+# only its command line tells the idle build daemon from a Maven client parked
+# beside the application.
+section jvm_cmdlines
+printf '%s\n' "$JCMD_L" | while read -r _p _rest; do
+    case $_p in '' | *[!0-9]*) continue ;; esac
+    [ "$_p" != "$PID" ] || continue
+    case $_rest in *JCmd*) continue ;; esac
+    [ -r "$PROC/$_p/cmdline" ] || continue
+    printf '%s %s\n' "$_p" "$(tr '\0' ' ' <"$PROC/$_p/cmdline" | cut -c1-800)"
+done | hc_redact
+
 exit "$RC"

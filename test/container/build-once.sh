@@ -154,24 +154,39 @@ EOF
 }
 
 # The daemon is the JVM that loads the lock class, so it is the one whose
-# system properties decide deleteLockFiles - not the native mvnd client. It
-# is still alive here: the build has just finished and idleTimeout is 15m.
+# system properties decide deleteLockFiles - not the native mvnd client. It is
+# still alive here: the build has just finished and idleTimeout is 15m. mvnd
+# 1.x starts it through plexus-classworlds, so jcmd -l names it
+# org.codehaus.plexus.classworlds.launcher.Launcher like any Maven JVM: it is
+# found by the mvnd properties on its java command line instead. Reported per
+# daemon: the lock property, and the heap mvnd.maxHeapSize should have capped;
+# and where the daemons registered - /tmp/mvnd in this container, or the
+# shared volume's ~/.m2/mvnd if mvnd.daemonStorage was not applied.
 jcmd_dump() {
+    _proc=${HC_PROC:-/proc} _jcmd=${HC_JCMD:-jcmd}   # HC_*: for test/ only
     echo "## jcmd -l"
-    jcmd -l 2>&1
-    _pids=$( { jcmd -l 2>/dev/null | awk '$2 ~ /mvndaemon|MavenDaemon/ { print $1 }'
-               pgrep -f 'mvndaemon|MavenDaemon' 2>/dev/null; } | sort -u)
+    "$_jcmd" -l 2>&1
     _n=0 _ok=0
-    for _p in $_pids; do
-        [ -r "/proc/$_p/cmdline" ] || continue
+    for _d in "$_proc"/[0-9]*; do
+        [ -r "$_d/cmdline" ] || continue
+        _exe=$(tr '\0' '\n' <"$_d/cmdline" 2>/dev/null | head -n 1)
+        case $_exe in */java|java) ;; *) continue ;; esac
+        _cl=$(tr '\0' ' ' <"$_d/cmdline" 2>/dev/null)
+        case $_cl in *-Dmvnd.home=*|*-Dmvnd.daemonStorage=*|*org.mvndaemon.*|*/opt/mvnd/*) ;; *) continue ;; esac
+        _p=${_d##*/}
         _n=$((_n + 1))
-        echo "## pid $_p: $(tr '\0' ' ' <"/proc/$_p/cmdline" | cut -c1-400)"
-        _props=$(jcmd "$_p" VM.system_properties 2>&1)
+        echo "## pid $_p: $(printf '%s' "$_cl" | cut -c1-800)"
+        _props=$("$_jcmd" "$_p" VM.system_properties 2>&1)
         printf '%s\n' "$_props"
-        if printf '%s\n' "$_props" | grep -qx 'aether.named.file-lock.deleteLockFiles=false'; then
-            _ok=$((_ok + 1))
-        fi
+        _del=$(printf '%s\n' "$_props" | sed -n 's/^aether\.named\.file-lock\.deleteLockFiles=//p' | head -n 1)
+        if [ "$_del" = false ]; then _ok=$((_ok + 1)); fi
+        _heap=$("$_jcmd" "$_p" VM.flags 2>/dev/null | tr ' ' '\n' | sed -n 's/^-XX:MaxHeapSize=\([0-9][0-9]*\)$/\1/p' | head -n 1)
+        echo "JCMD-DAEMON pid=$_p deleteLockFiles=${_del:-unset} maxHeapMB=$(( ${_heap:-0} / 1048576 ))"
     done
+    _tmp=no _m2=no
+    if [ -e /tmp/mvnd/registry.bin ]; then _tmp=yes; fi
+    if [ -e "${HOME:-/root}/.m2/mvnd/registry.bin" ]; then _m2=yes; fi
+    echo "JCMD-REGISTRY tmp=$_tmp m2=$_m2"
     echo "JCMD-SUMMARY daemons=$_n deleteLockFiles_false=$_ok"
 }
 

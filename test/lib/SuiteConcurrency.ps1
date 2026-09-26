@@ -202,6 +202,7 @@ function Conc-Step-LockAdapter {
         if ($c -eq 'mvnd' -and -not $st.HasMvnd) {
             Add-Result -Id $id -Status 'SKIP' -Req @('R4') -Message 'no mvnd in the dev image'
             Add-Result -Id 'D-LOCK-JCMD' -Status 'SKIP' -Req @('R4') -Message 'no mvnd in the dev image'
+            Add-Result -Id 'D-MVND-OPTS' -Status 'SKIP' -Req @('R4') -Message 'no mvnd in the dev image'
             continue
         }
         $flags = @()
@@ -234,13 +235,40 @@ function Conc-Step-LockAdapter {
                     Add-Result -Id 'D-LOCK-JCMD' -Status 'PASS' -Req @('R4') -Message "jcmd <pid> VM.system_properties of the mvnd daemon ($n JVM) has aether.named.file-lock.deleteLockFiles=false" -Evidence @($jpath)
                 }
                 elseif ($n -eq 0) {
-                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message 'no mvnd daemon JVM was running after the mvnd build (jcmd -l / pgrep found none)' -Evidence @($jpath)
+                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message 'no mvnd daemon JVM was running after the mvnd build (no java process with mvnd on its command line)' -Evidence @($jpath)
                 }
                 else {
-                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message "only $ok of $n mvnd daemon JVMs have aether.named.file-lock.deleteLockFiles=false: -Dmvnd.jvmArgs did not carry it, so the daemon deletes the lock files it takes" -Evidence @($jpath)
+                    Add-Result -Id 'D-LOCK-JCMD' -Status 'FAIL' -Req @('R4') -Message "only $ok of $n mvnd daemon JVMs have aether.named.file-lock.deleteLockFiles=false: it did not reach the daemon's JVM, so the daemon deletes the lock files it takes" -Evidence @($jpath)
                 }
             }
+            Conc-Report-MvndOptions -Jcmd $b.Jcmd -Evidence @($jpath)
         }
+    }
+}
+
+# D-MVND-OPTS: what mvnd did with the rest of its options, read off the daemon
+# itself. A daemon registry on the shared volume (~/.m2/mvnd) means
+# mvnd.daemonStorage was not applied, and twelve containers would find each
+# other's daemons there; a heap above 320 MB means mvnd.maxHeapSize was not,
+# in a 1g container.
+function Conc-Report-MvndOptions {
+    param([AllowEmptyString()][string] $Jcmd, [string[]] $Evidence = @())
+    $reg = [regex]::Match($Jcmd, 'JCMD-REGISTRY tmp=(\w+) m2=(\w+)')
+    $heaps = @([regex]::Matches($Jcmd, 'JCMD-DAEMON pid=\d+ deleteLockFiles=\S+ maxHeapMB=(\d+)') | ForEach-Object { [int]$_.Groups[1].Value })
+    if (-not $reg.Success -or $heaps.Count -eq 0) {
+        Add-Result -Id 'D-MVND-OPTS' -Status 'FAIL' -Req @('R4') -Message 'build-once.sh --jcmd reported no daemon or no registry, so the mvnd options could not be checked' -Evidence $Evidence
+        return
+    }
+    $problems = [System.Collections.Generic.List[string]]::new()
+    if ($reg.Groups[2].Value -eq 'yes') { $problems.Add('a daemon registry exists on the shared volume (~/.m2/mvnd/registry.bin): mvnd.daemonStorage was not applied') }
+    if ($reg.Groups[1].Value -ne 'yes') { $problems.Add('no registry in /tmp/mvnd, where mvnd.daemonStorage puts it') }
+    $big = @($heaps | Where-Object { $_ -ne 320 })
+    if ($big.Count) { $problems.Add("daemon max heap $($big -join ', ') MB, not the 320 MB of mvnd.maxHeapSize") }
+    if ($problems.Count) {
+        Add-Result -Id 'D-MVND-OPTS' -Status 'FAIL' -Req @('R4') -Message ($problems -join '; ') -Evidence $Evidence
+    }
+    else {
+        Add-Result -Id 'D-MVND-OPTS' -Status 'PASS' -Req @('R4') -Message "the daemon registered in /tmp/mvnd (per container, nothing on the shared volume), and its heap is capped at 320 MB" -Evidence $Evidence
     }
 }
 

@@ -35,6 +35,9 @@
  *              may legitimately be spelled differently).
  *   streams    stderr is stdout in both (RunProcess: redirectErrorStream).
  *   nomaven    OLD had a Maven JVM parked beside the application; NEW has none.
+ *              The idle mvnd build daemon may be there - it is the compiler,
+ *              not the application's parent - and is told from a Maven client
+ *              by its command line, since both run the classworlds Launcher.
  *   jdwp       the APPLICATION pid owns the LISTEN socket on 5005.
  *   sigign     reported, not judged: both launches are stopped with SIGTERM.
  *
@@ -660,26 +663,57 @@ public class LaunchDiff {
         return r;
     }
 
+    /** pid -> command line, from the capture's jvm_cmdlines section (empty when it has none). */
+    static Map<String, String> jvmCmdlines(Capture c) {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (String l : c.get("jvm_cmdlines")) {
+            int sp = l.indexOf(' ');
+            if (sp > 0) m.put(l.substring(0, sp), l.substring(sp + 1));
+        }
+        return m;
+    }
+
+    /**
+     * The mvnd build daemon: mvnd 1.x starts it through plexus-classworlds, so
+     * jcmd -l names it LAUNCHER like any Maven JVM. Its command line gives it
+     * away. Without one, the JVM counts as a Maven client - the strict reading.
+     */
+    static boolean isMvndDaemon(String cmdline) {
+        return cmdline != null && (cmdline.contains("-Dmvnd.home=") || cmdline.contains("-Dmvnd.daemonStorage=")
+                || cmdline.contains("org.mvndaemon.") || cmdline.contains("/opt/mvnd/"));
+    }
+
     void checkNoMaven() {
         if (missing("nomaven", "jcmd_l", "ppid")) return;
         List<String> problems = new ArrayList<>();
-        boolean oldHas = jvms(oldC).stream().anyMatch(j -> j.main().equals(LAUNCHER));
+        Map<String, String> oldCl = jvmCmdlines(oldC), newCl = jvmCmdlines(newC);
+        boolean oldHas = jvms(oldC).stream().anyMatch(j -> j.main().equals(LAUNCHER) && !isMvndDaemon(oldCl.get(j.pid())));
         List<Jvm> newJvms = jvms(newC);
-        boolean newHas = newJvms.stream().anyMatch(j -> j.main().equals(LAUNCHER));
+        List<String> newMaven = new ArrayList<>(), newDaemons = new ArrayList<>(), others = new ArrayList<>();
         String app = newC.first("main");
-        List<String> others = new ArrayList<>();
         for (Jvm j : newJvms) {
-            if (!j.main().equals(app) && !j.main().endsWith("sun.tools.jcmd.JCmd")) others.add(j.main());
+            if (j.main().equals(app) || j.main().endsWith("sun.tools.jcmd.JCmd")) continue;
+            if (j.main().equals(LAUNCHER)) {
+                if (isMvndDaemon(newCl.get(j.pid()))) newDaemons.add(j.pid());
+                else newMaven.add(j.pid());
+            } else {
+                others.add(j.main());
+            }
         }
         List<String> po = tokens(oldC.first("ppid")), pn = tokens(newC.first("ppid"));
         String oldParent = po.size() >= 2 ? po.get(1) : "?", newParent = pn.size() >= 2 ? pn.get(1) : "?";
-        if (newHas) problems.add("NEW still has a Maven launcher JVM (" + LAUNCHER + ")");
+        if (!newMaven.isEmpty())
+            problems.add("NEW still has a Maven launcher JVM that is not the mvnd daemon (pid " + String.join(", ", newMaven) + ": "
+                    + clip(newCl.getOrDefault(newMaven.get(0), "no command line captured")) + ")");
         if (!oldHas) problems.add("OLD had no Maven launcher JVM, so it was not a spring-boot:run launch - the comparison has no reference");
         if (newParent.equals("java")) problems.add("NEW's parent process is a JVM, not the dev-reload.sh shell");
         String facts = "OLD parent " + oldParent + " (pid " + (po.isEmpty() ? "?" : po.get(0)) + "), NEW parent " + newParent
-                + " (pid " + (pn.isEmpty() ? "?" : pn.get(0)) + ")" + (others.isEmpty() ? "" : "; other JVMs in NEW: " + others);
+                + " (pid " + (pn.isEmpty() ? "?" : pn.get(0)) + ")"
+                + (newDaemons.isEmpty() ? "" : "; beside it the idle mvnd build daemon (pid " + String.join(", ", newDaemons)
+                        + "), as designed: not the application's parent, and gone after mvnd.idleTimeout")
+                + (others.isEmpty() ? "" : "; other JVMs in NEW: " + others);
         if (problems.isEmpty()) {
-            result("nomaven", "PASS", "no Maven JVM beside the application any more; " + facts);
+            result("nomaven", "PASS", "no Maven client JVM beside the application any more; " + facts);
         } else {
             result("nomaven", "FAIL", String.join("; ", problems) + "; " + facts);
         }
