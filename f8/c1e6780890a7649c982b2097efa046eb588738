@@ -1,0 +1,16 @@
+README.md
+  h_bfc075b6e02f74 195-196,202,225-228
+dev-reload.sh
+  h_bfc075b6e02f74 170,263-264,270-272,274-281,283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f8c1e6780890a7649c982b2097efa046eb588738",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
