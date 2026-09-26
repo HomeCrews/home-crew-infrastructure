@@ -1,0 +1,22 @@
+test/README.md
+  h_bfc075b6e02f74 353-355,357-358
+test/container/build-once.sh
+  h_bfc075b6e02f74 185-188,190-191,194
+test/container/unit-dev-reload.sh
+  h_bfc075b6e02f74 1817,1885-1889,1894,1897,1899
+test/container/unit-state-machine.sh
+  h_bfc075b6e02f74 442,815-819
+test/lib/SuiteConcurrency.ps1
+  h_bfc075b6e02f74 241-243,252-253,266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2488864f839ee584fbfb3ceadf426b7e3b684b80",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
