@@ -167,7 +167,7 @@ MVN_FLAGS="$MVN_FLAGS -Daether.syncContext.named.factory=file-lock -Daether.sync
 # unlinking the file the moment it is opened: the next process creates a NEW
 # file with the same name, locks that inode, and the two never meet. It is read
 # ONCE, from System properties, when the lock class loads, so it has to be on
-# the JVM's own command line - MAVEN_OPTS for the wrapper, JDK_JAVA_OPTIONS for
+# the JVM's own command line - MAVEN_OPTS for the wrapper, JAVA_TOOL_OPTIONS for
 # the mvnd daemon (see mvnd_cmd) - not a -D to an already-running Maven.
 LOCK_JVM_PROP="-Daether.named.file-lock.deleteLockFiles=false"
 
@@ -260,26 +260,27 @@ settle() {
 
 # mvnd flags:
 #
-#   daemonStorage  defaults to ~/.m2/mvnd, and ~/.m2 is SHARED by all twelve
-#                  containers. They would see each other's daemons in one
+#   daemonStorage  defaults to ~/.m2/mvnd/registry/<version>, and ~/.m2 is
+#                  SHARED by all twelve containers. They would see each other's daemons in one
 #                  registry and try to connect to sockets that do not exist in
 #                  their own namespace. /tmp is per-container.
 #   idleTimeout    so that the services you are not editing let their daemon go
 #                  instead of each holding a JVM for the default three hours.
 #   maxHeapSize    the daemon is the second persistent JVM in a 1g container,
-#                  so it is capped. Through this option, not an -Xmx among its
-#                  JVM options: mvnd appends its own -Xmx (2g by default) after
-#                  them, and the last one wins.
+#                  so it is capped. Through this option, which mvnd turns into
+#                  the daemon's -Xmx itself: an -Xmx among its JVM options
+#                  would be dropped with them (below).
 #
-# The lock property goes to the daemon in JDK_JAVA_OPTIONS, which the java
-# launcher reads, and which the daemon - started by this client - inherits.
-# -Dmvnd.jvmArgs did not get it there - most likely because every service has
-# a .mvn/jvm.config, which mvnd uses for the daemon's JVM options in its place
-# - and no lock file outlived an mvnd build (the harness's first Windows run:
-# D-SCAN-mvnd-LOCKS, D-COLD-mvnd). Only this command gets it, never the
-# application's java.
+# The lock property goes to the daemon in JAVA_TOOL_OPTIONS, which the JVM
+# itself applies at startup, before any Maven class loads. mvnd 1.0.2 drops the
+# two routes it documents (DaemonParameters.withJvmArgs/withJdkJavaOpts only
+# see their own map, and what they put there shadows the -D or environment
+# value): -Dmvnd.jvmArgs is replaced by .mvn/jvm.config, which every service
+# has, and JDK_JAVA_OPTIONS by mvnd's own --add-opens list. The daemon's
+# environment is otherwise the client's, JAVA_TOOL_OPTIONS included. Only
+# this command gets it, never the application's java.
 mvnd_cmd() {
-    JDK_JAVA_OPTIONS="${JDK_JAVA_OPTIONS:+$JDK_JAVA_OPTIONS }$LOCK_JVM_PROP" \
+    JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }$LOCK_JVM_PROP" \
         mvnd -Dmvnd.daemonStorage=/tmp/mvnd -Dmvnd.idleTimeout=15m -Dmvnd.maxHeapSize=320m "$@"
 }
 

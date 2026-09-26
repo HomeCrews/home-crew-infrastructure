@@ -192,14 +192,14 @@ there if the loop feels slow:
     docker logs homecrew-user-service | grep 'compiler:'
 
 Three mvnd flags are load-bearing, all set in `dev-reload.sh`:
-`mvnd.daemonStorage` is moved to `/tmp`, because it defaults to `~/.m2/mvnd`
-and `~/.m2` is shared by all twelve containers - they would otherwise share one
+`mvnd.daemonStorage` is moved to `/tmp`, because it defaults to
+`~/.m2/mvnd/registry/<version>` and `~/.m2` is shared by all twelve containers - they would otherwise share one
 daemon registry and try to reach sockets that do not exist in their own
 namespace. `mvnd.idleTimeout=15m` lets the services you are not editing drop
 their daemon instead of each holding a JVM for the default three hours. And
 `mvnd.maxHeapSize=320m` caps it, because the daemon is a second persistent JVM
 in a 1g container. The daemon also gets the lock setting described next, in
-`JDK_JAVA_OPTIONS`. After a build-file change the daemon is stopped before the
+`JAVA_TOOL_OPTIONS`. After a build-file change the daemon is stopped before the
 build: it caches each project's resolved dependencies, and not every pom edit
 invalidates that cache.
 
@@ -222,10 +222,10 @@ other. Now:
   file of the same name and nobody ever waits. `-Daether.named.file-lock.deleteLockFiles=false`
   turns that off. It is read once, when the JVM loads the lock class, so it is
   on the JVM's own command line: `MAVEN_OPTS` for `./mvnw`, and for the mvnd
-  daemon `JDK_JAVA_OPTIONS` in the environment of the mvnd command that starts
-  it. `mvnd.jvmArgs` did not reach the daemon: each service's
-  `.mvn/jvm.config` most likely takes its place. The application's own `java`
-  never gets either.
+  daemon `JAVA_TOOL_OPTIONS` in the environment of the mvnd command that starts
+  it. mvnd 1.0.2 drops the two routes it documents: `mvnd.jvmArgs` is replaced
+  by the service's `.mvn/jvm.config`, and `JDK_JAVA_OPTIONS` by mvnd's own
+  `--add-opens` list. The application's own `java` never gets it.
 - **The wrapper's Maven is installed once, safely.** `./mvnw` downloads Maven
   itself the first time, outside any resolver lock, and used to copy it into
   place file by file - so a second container could run a half-copied Maven.
