@@ -1,0 +1,28 @@
+test/README.md
+  h_bfc075b6e02f74 354-355,384-386
+test/container/build-once.sh
+  h_bfc075b6e02f74 157-164,166,168,170-176,178-179,181-184,186-189
+test/container/capture-launch.sh
+  h_bfc075b6e02f74 184-197
+test/container/unit-dev-reload.sh
+  h_bfc075b6e02f74 1817,1883,1885-1888,1890-1893,1896,1898
+test/container/unit-state-machine.sh
+  h_bfc075b6e02f74 442,815-818
+test/java/LaunchDiff.java
+  h_bfc075b6e02f74 38-40,666-685,689-690,692,695-701,705-707,711-714,716
+test/lib/SuiteConcurrency.ps1
+  h_bfc075b6e02f74 205,238,241,244,249-274
+test/lib/SuiteReload.ps1
+  h_bfc075b6e02f74 242,246-250,1760-1775,1783-1785,1787-1791,1794,2260-2265,2268,2273-2281,2283-2308,2323-2325,2365
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3ade6e70df8d5743e6bedbbd668d71d7f50f9a9e",
+  "prompts": {},
+  "humans": {
+    "h_bfc075b6e02f74": {
+      "author": "mThanuj <mullagurithanuj0@gmail.com>"
+    }
+  }
+}
